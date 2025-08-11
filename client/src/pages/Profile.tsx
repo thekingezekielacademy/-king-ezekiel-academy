@@ -48,6 +48,8 @@ const Profile: React.FC = () => {
   const [paystackReady, setPaystackReady] = useState(false);
   const [paystackError, setPaystackError] = useState<string | null>(null);
   
+
+  
   // Load Paystack script early and mark ready on load
   useEffect(() => {
     if (!PAYSTACK_PUBLIC_KEY) {
@@ -633,11 +635,7 @@ const Profile: React.FC = () => {
                   Cancel subscription
                 </button>
               </div>
-              <p className="mt-4 text-xs text-gray-500">
-                💳 <strong>Test Mode:</strong> Using Paystack test environment. Use test card: 4084 0840 8408 4081
-                <br />
-                📧 <strong>Support:</strong> Contact support if you need help with payments.
-              </p>
+
             </div>
           </div>
         )}

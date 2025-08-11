@@ -1,12 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ProgressRing from '../../components/ProgressRing';
+import AdvancedVideoPlayer from '../../components/AdvancedVideoPlayer';
 
 const LessonPlayer: React.FC = () => {
   const navigate = useNavigate();
   const { id, lessonId } = useParams();
 
   const current = Number(lessonId) || 1;
+  
+  // Sample video data for demonstration
+  const [currentVideo] = useState({
+    id: lessonId,
+    name: `Lesson ${lessonId} - Advanced Concepts`,
+    link: 'https://youtu.be/hd8LZ8hJtVs?si=e8NvHi5mjf7yehnh', // Sample YouTube video
+    duration: '37:51'
+  });
+
+  // Handle video player events
+  const handleVideoPlay = () => {
+    console.log(`Lesson ${lessonId} video started playing`);
+    // You can add analytics tracking here
+  };
+
+  const handleVideoPause = () => {
+    console.log(`Lesson ${lessonId} video paused`);
+    // You can add progress tracking here
+  };
+
+  const handleVideoEnded = () => {
+    console.log(`Lesson ${lessonId} video completed`);
+    // You can add completion tracking here
+  };
 
   const nextLesson = () => {
     const next = current + 1;
@@ -18,6 +43,18 @@ const LessonPlayer: React.FC = () => {
       const prev = current - 1;
       navigate(`/course/${id}/lesson/${prev}`);
     }
+  };
+
+  // Helper function to extract YouTube video ID
+  const getYouTubeVideoId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  // Check if video is YouTube
+  const isYouTubeVideo = (url: string) => {
+    return url.includes('youtube.com') || url.includes('youtu.be');
   };
 
   return (
@@ -51,7 +88,7 @@ const LessonPlayer: React.FC = () => {
           <div className="bg-white rounded-xl border overflow-hidden mb-4">
             <div className="p-4 border-b flex items-center justify-between gap-4">
               <div>
-                <div className="font-bold">Lesson {lessonId} Title</div>
+                <div className="font-bold">{currentVideo.name}</div>
                 <div className="h-1.5 bg-gray-100 rounded mt-2">
                   <div className="h-1.5 bg-primary-500 rounded w-1/5 transition-all" />
                 </div>
@@ -60,7 +97,29 @@ const LessonPlayer: React.FC = () => {
                 <ProgressRing size={52} strokeWidth={6} progress={20} />
               </div>
             </div>
-            <div className="aspect-video bg-black" />
+            <div className="w-full overflow-hidden" style={{ minHeight: '400px', height: '60vh', maxHeight: '600px' }}>
+              {isYouTubeVideo(currentVideo.link) ? (
+                <AdvancedVideoPlayer
+                  src={getYouTubeVideoId(currentVideo.link) || ''}
+                  type="youtube"
+                  title={currentVideo.name}
+                  autoplay={false}
+                  onPlay={handleVideoPlay}
+                  onPause={handleVideoPause}
+                  onEnded={handleVideoEnded}
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-900 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-lg font-medium mb-2">Video Player</p>
+                    <p className="text-sm text-gray-300">Video source not supported</p>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="p-4 space-y-4">
               <div className="text-sm text-gray-700">Downloadable resources • Transcript • Notes</div>
               <div className="bg-primary-50 border border-primary-100 p-3 rounded text-sm text-primary-800">🔥 Great job! You’re on track — keep going.</div>
