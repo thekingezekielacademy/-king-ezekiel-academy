@@ -119,8 +119,8 @@ const CourseView: React.FC = () => {
     }
     
     if (videoId) {
-      // Return embed URL with minimal branding and no related videos
-      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0`;
+      // Return embed URL with enhanced parameters to reduce warnings
+      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=0&origin=${window.location.origin}`;
     }
     
     return url; // Fallback to original URL if parsing fails
@@ -232,20 +232,33 @@ const CourseView: React.FC = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Lesson Player</h3>
-              <p className="text-sm text-gray-600 mb-4">Preview videos exactly as students will see them</p>
+              <p className="text-sm text-gray-600 mb-4">
+                Preview videos exactly as students will see them
+                <span className="ml-2 text-xs text-amber-600">
+                  ⚠️ YouTube warnings in console are normal and don't affect functionality
+                </span>
+              </p>
               {selectedVideo ? (
                 <div>
                   <h4 className="text-lg font-medium text-gray-900 mb-4">{selectedVideo.name}</h4>
                   <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden">
                     {selectedVideo.link.includes('youtube.com') || selectedVideo.link.includes('youtu.be') ? (
-                      <iframe
-                        src={getYouTubeEmbedUrl(selectedVideo.link)}
-                        title={selectedVideo.name}
-                        className="w-full h-full"
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
+                      <div className="relative w-full h-full">
+                        <iframe
+                          src={getYouTubeEmbedUrl(selectedVideo.link)}
+                          title={selectedVideo.name}
+                          className="w-full h-full"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          loading="lazy"
+                          onLoad={() => console.log('YouTube video loaded successfully')}
+                          onError={() => console.error('Failed to load YouTube video')}
+                        />
+                        <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                          YouTube Preview
+                        </div>
+                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <div className="text-center">
