@@ -232,19 +232,19 @@ const CourseView: React.FC = () => {
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">Lesson Player</h3>
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-gray-600 mb-2">
                   Preview videos exactly as students will see them
                   <span className="ml-2 text-xs text-green-600">
                     ✨ YouTube streaming player with zero branding
                   </span>
-                  <span className="ml-2 text-xs text-blue-600">
+                  <span className="ml-2 text-blue-600">
                     💡 Use unlisted YouTube videos to prevent suggestions
                   </span>
                 </p>
                 {selectedVideo ? (
-                  <div>
-                    <h4 className="text-lg font-medium text-gray-900 mb-4">{selectedVideo.name}</h4>
-                                          <div className="w-full bg-gray-100 rounded-lg mb-4 overflow-hidden" style={{ minHeight: '300px', height: '60vh', maxHeight: '600px' }}>
+                  <div className="-mx-6">
+                    <h4 className="text-lg font-medium text-gray-900 mb-2 px-6">{selectedVideo.name}</h4>
+                    <div className="w-full overflow-hidden" style={{ minHeight: '280px', height: '55vh', maxHeight: '580px', margin: 0, padding: 0, marginBottom: 0 }}>
                         {isYouTubeVideo(selectedVideo.link) ? (
                           <AdvancedVideoPlayer
                             src={getYouTubeVideoId(selectedVideo.link)}
@@ -272,7 +272,7 @@ const CourseView: React.FC = () => {
                           </div>
                         )}
                       </div>
-                    <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="flex items-center justify-between text-sm text-gray-600 px-6 -mt-2">
                       <span>Duration: {formatDuration(selectedVideo.duration)}</span>
                       <span>Lesson {videos.findIndex(v => v.id === selectedVideo.id) + 1} of {videos.length}</span>
                     </div>
