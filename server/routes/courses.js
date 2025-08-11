@@ -1,8 +1,5 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const Course = require('../models/Course');
-const Lesson = require('../models/Lesson');
-const Progress = require('../models/Progress');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -17,42 +14,47 @@ router.get('/', async (req, res) => {
       level,
       instructor,
       search,
-      sort = 'createdAt',
+      sort = 'created_at',
       order = 'desc',
       page = 1,
       limit = 12
     } = req.query;
 
+    const supabase = req.app.locals.supabase;
+
     // Build filter object
-    const filter = { isPublished: true };
-    
-    if (category) filter.category = category;
-    if (level) filter.level = level;
-    if (instructor) filter.instructor = instructor;
+    let query = supabase
+      .from('courses')
+      .select('*, profiles!courses_instructor_fkey(name)')
+      .eq('is_published', true);
+
+    if (category) query = query.eq('category', category);
+    if (level) query = query.eq('level', level);
+    if (instructor) query = query.eq('instructor', instructor);
     
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
-      ];
+      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
-    // Build sort object
-    const sortObj = {};
-    sortObj[sort] = order === 'desc' ? -1 : 1;
+    // Get total count for pagination
+    const { count } = await supabase
+      .from('courses')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_published', true);
 
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Apply sorting and pagination
+    const sortOrder = order === 'desc' ? false : true;
+    query = query.order(sort, { ascending: sortOrder });
+    
+    const from = (parseInt(page) - 1) * parseInt(limit);
+    const to = from + parseInt(limit) - 1;
+    query = query.range(from, to);
 
-    const courses = await Course.find(filter)
-      .populate('instructor', 'firstName lastName')
-      .sort(sortObj)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select('-__v');
+    const { data: courses, error } = await query;
 
-    const total = await Course.countDocuments(filter);
+    if (error) {
+      throw error;
+    }
 
     res.json({
       success: true,
@@ -60,8 +62,8 @@ router.get('/', async (req, res) => {
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
+        total: count || 0,
+        pages: Math.ceil((count || 0) / parseInt(limit))
       }
     });
 
@@ -79,15 +81,20 @@ router.get('/', async (req, res) => {
 // @access  Public
 router.get('/:id', async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id)
-      .populate('instructor', 'firstName lastName')
-      .populate({
-        path: 'lessons',
-        match: { isPublished: true },
-        options: { sort: { order: 1 } }
-      });
+    const supabase = req.app.locals.supabase;
 
-    if (!course) {
+    const { data: course, error } = await supabase
+      .from('courses')
+      .select(`
+        *,
+        profiles!courses_instructor_fkey(name),
+        lessons!lessons_course_fkey(*)
+      `)
+      .eq('id', req.params.id)
+      .eq('is_published', true)
+      .single();
+
+    if (error || !course) {
       return res.status(404).json({
         success: false,
         message: 'Course not found'
@@ -95,22 +102,26 @@ router.get('/:id', async (req, res) => {
     }
 
     // Get course statistics
-    const enrollmentCount = await Progress.countDocuments({ course: course._id });
-    const completedCount = await Progress.countDocuments({ 
-      course: course._id, 
-      status: 'completed' 
-    });
+    const { count: enrollmentCount } = await supabase
+      .from('progress')
+      .select('*', { count: 'exact', head: true })
+      .eq('course', req.params.id);
 
-    const courseData = course.toJSON();
-    courseData.statistics = {
-      enrollmentCount,
-      completedCount,
-      completionRate: enrollmentCount > 0 ? Math.round((completedCount / enrollmentCount) * 100) : 0
+    const { count: completedCount } = await supabase
+      .from('progress')
+      .select('*', { count: 'exact', head: true })
+      .eq('course', req.params.id)
+      .eq('status', 'completed');
+
+    // Add statistics to course object
+    course.statistics = {
+      enrollmentCount: enrollmentCount || 0,
+      completedCount: completedCount || 0
     };
 
     res.json({
       success: true,
-      data: courseData
+      data: course
     });
 
   } catch (error) {
@@ -124,73 +135,50 @@ router.get('/:id', async (req, res) => {
 
 // @route   POST /api/courses
 // @desc    Create a new course
-// @access  Private (Instructor/Admin only)
-router.post('/', [
-  auth,
+// @access  Private (Instructors/Admins only)
+router.post('/', auth, [
   body('title').trim().isLength({ min: 3, max: 100 }).withMessage('Title must be between 3 and 100 characters'),
-  body('description').trim().isLength({ min: 10, max: 500 }).withMessage('Description must be between 10 and 500 characters'),
-  body('category').isIn(['web-development', 'digital-marketing', 'ui-ux-design', 'data-analytics', 'branding', 'graphic-design', 'content-creation', 'business-skills']).withMessage('Invalid category'),
-  body('level').isIn(['beginner', 'intermediate', 'advanced']).withMessage('Invalid level'),
-  body('duration').isFloat({ min: 0.5 }).withMessage('Duration must be at least 0.5 hours'),
-  body('price').isFloat({ min: 0 }).withMessage('Price must be non-negative')
+  body('description').trim().isLength({ min: 10, max: 1000 }).withMessage('Description must be between 10 and 1000 characters'),
+  body('category').notEmpty().withMessage('Category is required'),
+  body('level').isIn(['beginner', 'intermediate', 'advanced']).withMessage('Level must be beginner, intermediate, or advanced'),
+  body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number')
 ], async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
+      return res.status(400).json({ 
+        success: false, 
         message: 'Validation failed',
-        errors: errors.array()
+        errors: errors.array() 
       });
     }
 
-    // Check if user is instructor or admin
+    // Check if user has permission to create courses
     if (!['teacher', 'administrator'].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: 'Only instructors and administrators can create courses'
+        message: 'Access denied. Only teachers and administrators can create courses.'
       });
     }
 
-    const {
-      title,
-      description,
-      longDescription,
-      category,
-      level,
-      duration,
-      price,
-      originalPrice,
-      tags,
-      requirements,
-      learningOutcomes
-    } = req.body;
-
-    // Generate slug from title
-    const slug = title.toLowerCase()
-      .replace(/[^a-z0-9 -]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .trim('-');
-
-    const course = new Course({
-      title,
-      slug,
-      description,
-      longDescription,
-      category,
-      level,
-      duration,
-      price,
-      originalPrice,
+    const supabase = req.app.locals.supabase;
+    const courseData = {
+      ...req.body,
       instructor: req.user.id,
-      tags: tags || [],
-      requirements: requirements || [],
-      learningOutcomes: learningOutcomes || []
-    });
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
 
-    await course.save();
+    const { data: course, error } = await supabase
+      .from('courses')
+      .insert(courseData)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     res.status(201).json({
       success: true,
@@ -200,12 +188,6 @@ router.post('/', [
 
   } catch (error) {
     console.error('Create course error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'A course with this slug already exists'
-      });
-    }
     res.status(500).json({
       success: false,
       message: 'Server error while creating course'
@@ -216,54 +198,67 @@ router.post('/', [
 // @route   PUT /api/courses/:id
 // @desc    Update a course
 // @access  Private (Course instructor or admin only)
-router.put('/:id', [
-  auth,
-  body('title').optional().trim().isLength({ min: 3, max: 100 }).withMessage('Title must be between 3 and 100 characters'),
-  body('description').optional().trim().isLength({ min: 10, max: 500 }).withMessage('Description must be between 10 and 500 characters'),
-  body('category').optional().isIn(['web-development', 'digital-marketing', 'ui-ux-design', 'data-analytics', 'branding', 'graphic-design', 'content-creation', 'business-skills']).withMessage('Invalid category'),
-  body('level').optional().isIn(['beginner', 'intermediate', 'advanced']).withMessage('Invalid level'),
-  body('duration').optional().isFloat({ min: 0.5 }).withMessage('Duration must be at least 0.5 hours'),
-  body('price').optional().isFloat({ min: 0 }).withMessage('Price must be non-negative')
+router.put('/:id', auth, [
+  body('title').optional().trim().isLength({ min: 3, max: 100 }),
+  body('description').optional().trim().isLength({ min: 10, max: 1000 }),
+  body('category').optional().notEmpty(),
+  body('level').optional().isIn(['beginner', 'intermediate', 'advanced']),
+  body('price').optional().isFloat({ min: 0 })
 ], async (req, res) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
+      return res.status(400).json({ 
+        success: false, 
         message: 'Validation failed',
-        errors: errors.array()
+        errors: errors.array() 
       });
     }
 
-    const course = await Course.findById(req.params.id);
+    const supabase = req.app.locals.supabase;
 
-    if (!course) {
+    // Check if course exists and user has permission
+    const { data: existingCourse, error: fetchError } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (fetchError || !existingCourse) {
       return res.status(404).json({
         success: false,
         message: 'Course not found'
       });
     }
 
-    // Check if user is course instructor or admin
-    if (course.instructor.toString() !== req.user.id && req.user.role !== 'administrator') {
+    // Check permissions
+    if (req.user.role !== 'administrator' && existingCourse.instructor !== req.user.id) {
       return res.status(403).json({
         success: false,
-        message: 'Only the course instructor or administrator can update this course'
+        message: 'Access denied. You can only edit your own courses.'
       });
     }
 
-    // Update course
-    const updatedCourse = await Course.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, lastUpdated: Date.now() },
-      { new: true, runValidators: true }
-    );
+    const updateData = {
+      ...req.body,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: course, error } = await supabase
+      .from('courses')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
 
     res.json({
       success: true,
       message: 'Course updated successfully',
-      data: updatedCourse
+      data: course
     });
 
   } catch (error) {
@@ -275,96 +270,54 @@ router.put('/:id', [
   }
 });
 
-// @route   POST /api/courses/:id/enroll
-// @desc    Enroll in a course
-// @access  Private
-router.post('/:id/enroll', auth, async (req, res) => {
+// @route   DELETE /api/courses/:id
+// @desc    Delete a course
+// @access  Private (Course instructor or admin only)
+router.delete('/:id', auth, async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id);
+    const supabase = req.app.locals.supabase;
 
-    if (!course) {
+    // Check if course exists and user has permission
+    const { data: existingCourse, error: fetchError } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (fetchError || !existingCourse) {
       return res.status(404).json({
         success: false,
         message: 'Course not found'
       });
     }
 
-    if (!course.isPublished) {
-      return res.status(400).json({
+    // Check permissions
+    if (req.user.role !== 'administrator' && existingCourse.instructor !== req.user.id) {
+      return res.status(403).json({
         success: false,
-        message: 'Course is not published yet'
+        message: 'Access denied. You can only delete your own courses.'
       });
     }
 
-    // Check if user is already enrolled
-    const existingProgress = await Progress.findOne({
-      user: req.user.id,
-      course: req.params.id
-    });
+    const { error } = await supabase
+      .from('courses')
+      .delete()
+      .eq('id', req.params.id);
 
-    if (existingProgress) {
-      return res.status(400).json({
-        success: false,
-        message: 'You are already enrolled in this course'
-      });
-    }
-
-    // Create progress record
-    const progress = new Progress({
-      user: req.user.id,
-      course: req.params.id,
-      currentLesson: course.lessons[0] || null
-    });
-
-    await progress.save();
-
-    // Update course enrollment count
-    await Course.findByIdAndUpdate(req.params.id, {
-      $inc: { enrollmentCount: 1 }
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Successfully enrolled in course',
-      data: progress
-    });
-
-  } catch (error) {
-    console.error('Enroll error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while enrolling in course'
-    });
-  }
-});
-
-// @route   GET /api/courses/:id/progress
-// @desc    Get user's progress in a course
-// @access  Private
-router.get('/:id/progress', auth, async (req, res) => {
-  try {
-    const progress = await Progress.findOne({
-      user: req.user.id,
-      course: req.params.id
-    }).populate('course').populate('currentLesson');
-
-    if (!progress) {
-      return res.status(404).json({
-        success: false,
-        message: 'You are not enrolled in this course'
-      });
+    if (error) {
+      throw error;
     }
 
     res.json({
       success: true,
-      data: progress
+      message: 'Course deleted successfully'
     });
 
   } catch (error) {
-    console.error('Get progress error:', error);
+    console.error('Delete course error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while fetching progress'
+      message: 'Server error while deleting course'
     });
   }
 });

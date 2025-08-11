@@ -1,6 +1,3 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-
 const auth = async (req, res, next) => {
   try {
     let token;
@@ -17,27 +14,33 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    const supabase = req.app.locals.supabase;
+
+    // Verify token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
     
-    // Get user from token
-    const user = await User.findById(decoded.id);
-    if (!user) {
+    if (error || !user) {
       return res.status(401).json({
         success: false,
         message: 'Token is not valid'
       });
     }
 
-    // Check if user is active
-    if (!user.isActive) {
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
       return res.status(401).json({
         success: false,
-        message: 'Account is deactivated'
+        message: 'User profile not found'
       });
     }
 
-    req.user = user;
+    req.user = profile;
     next();
 
   } catch (error) {

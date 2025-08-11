@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -14,8 +13,8 @@ const newsletterRoutes = require('./routes/newsletter');
 const courseRoutes = require('./routes/courses');
 const lessonRoutes = require('./routes/lessons');
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from parent directory
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 
@@ -34,13 +33,23 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kingEzekielAcademy', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ MongoDB connected successfully'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+// Supabase configuration
+const { createClient } = require('@supabase/supabase-js');
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('❌ Missing Supabase environment variables');
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Make supabase available to routes
+app.locals.supabase = supabase;
+
+console.log('✅ Supabase connected successfully');
 
 // API Routes
 app.use('/api/auth', authRoutes);

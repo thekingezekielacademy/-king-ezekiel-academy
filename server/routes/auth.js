@@ -1,17 +1,9 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
-
-// Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key', {
-    expiresIn: '30d'
-  });
-};
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -36,9 +28,15 @@ router.post('/register', [
     }
 
     const { firstName, lastName, email, phone, password, role } = req.body;
+    const supabase = req.app.locals.supabase;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const { data: existingUser, error: checkError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email)
+      .single();
+
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -46,32 +44,60 @@ router.post('/register', [
       });
     }
 
-    // Create new user
-    const user = new User({
-      firstName,
-      lastName,
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create user in Supabase auth
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
-      phone,
       password,
-      role
+      email_confirm: true,
+      user_metadata: {
+        firstName,
+        lastName,
+        role
+      }
     });
 
-    await user.save();
+    if (authError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to create user account',
+        error: authError.message
+      });
+    }
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Create profile in profiles table
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        name: `${firstName} ${lastName}`,
+        email,
+        phone,
+        role
+      });
+
+    if (profileError) {
+      // If profile creation fails, delete the auth user
+      await supabase.auth.admin.deleteUser(authData.user.id);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user profile',
+        error: profileError.message
+      });
+    }
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      token,
       user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        fullName: user.getFullName()
+        id: authData.user.id,
+        firstName,
+        lastName,
+        email,
+        role,
+        fullName: `${firstName} ${lastName}`
       }
     });
 
@@ -103,53 +129,46 @@ router.post('/login', [
     }
 
     const { email, password } = req.body;
+    const supabase = req.app.locals.supabase;
 
-    // Find user and include password for comparison
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
+    // Authenticate with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
 
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError) {
+      return res.status(500).json({
         success: false,
-        message: 'Account is deactivated. Please contact support.'
+        message: 'Failed to fetch user profile'
       });
     }
-
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Generate token
-    const token = generateToken(user._id);
 
     res.json({
       success: true,
       message: 'Login successful',
-      token,
       user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        fullName: user.getFullName(),
-        isEmailVerified: user.isEmailVerified
-      }
+        id: data.user.id,
+        email: data.user.email,
+        name: profile.name,
+        role: profile.role,
+        phone: profile.phone
+      },
+      session: data.session
     });
 
   } catch (error) {
@@ -162,92 +181,65 @@ router.post('/login', [
 });
 
 // @route   GET /api/auth/me
-// @desc    Get current user
+// @desc    Get current user profile
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({
+    const supabase = req.app.locals.supabase;
+    
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error) {
+      return res.status(500).json({
         success: false,
-        message: 'User not found'
+        message: 'Failed to fetch profile'
       });
     }
 
     res.json({
       success: true,
-      user
+      user: profile
     });
 
   } catch (error) {
-    console.error('Get user error:', error);
+    console.error('Get profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error while fetching profile'
     });
   }
 });
 
 // @route   POST /api/auth/logout
-// @desc    Logout user (client-side token removal)
+// @desc    Logout user
 // @access  Private
-router.post('/logout', auth, (req, res) => {
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
-});
-
-// @route   PUT /api/auth/profile
-// @desc    Update user profile
-// @access  Private
-router.put('/profile', auth, [
-  body('firstName').optional().trim().isLength({ min: 2 }),
-  body('lastName').optional().trim().isLength({ min: 2 }),
-  body('phone').optional().trim().isLength({ min: 10 })
-], async (req, res) => {
+router.post('/logout', auth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Validation failed',
-        errors: errors.array() 
-      });
-    }
+    const supabase = req.app.locals.supabase;
+    
+    const { error } = await supabase.auth.admin.signOut(req.user.id);
 
-    const { firstName, lastName, phone, preferences } = req.body;
-    const updateFields = {};
-
-    if (firstName) updateFields.firstName = firstName;
-    if (lastName) updateFields.lastName = lastName;
-    if (phone) updateFields.phone = phone;
-    if (preferences) updateFields.preferences = preferences;
-
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      updateFields,
-      { new: true, runValidators: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({
+    if (error) {
+      return res.status(500).json({
         success: false,
-        message: 'User not found'
+        message: 'Failed to logout'
       });
     }
 
     res.json({
       success: true,
-      message: 'Profile updated successfully',
-      user
+      message: 'Logout successful'
     });
 
   } catch (error) {
-    console.error('Profile update error:', error);
+    console.error('Logout error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error during profile update'
+      message: 'Server error during logout'
     });
   }
 });
