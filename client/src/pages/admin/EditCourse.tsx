@@ -89,7 +89,7 @@ const EditCourse: React.FC = () => {
     if (courseId && user) {
       fetchCourseData();
     }
-  }, [courseId, user, fetchCourseData]);
+  }, [courseId, user?.id, user?.role, fetchCourseData]);
 
   const handleInputChange = (field: keyof CourseData, value: string) => {
     setCourseData(prev => ({ ...prev, [field]: value }));
