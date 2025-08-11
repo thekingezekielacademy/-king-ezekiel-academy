@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -19,7 +19,6 @@ interface CourseData {
 }
 
 const EditCourse: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,13 +37,7 @@ const EditCourse: React.FC = () => {
   const [newVideo, setNewVideo] = useState({ name: '', duration: '', link: '' });
   const [isDragOver, setIsDragOver] = useState(false);
 
-  useEffect(() => {
-    if (courseId) {
-      fetchCourseData();
-    }
-  }, [courseId]);
-
-  const fetchCourseData = async () => {
+  const fetchCourseData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -79,7 +72,13 @@ const EditCourse: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (courseId) {
+      fetchCourseData();
+    }
+  }, [courseId, fetchCourseData]);
 
   const handleInputChange = (field: keyof CourseData, value: string) => {
     setCourseData(prev => ({ ...prev, [field]: value }));
