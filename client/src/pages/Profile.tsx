@@ -1,0 +1,637 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { FaEdit, FaEnvelope, FaUser, FaImage, FaKey, FaSave, FaTimes } from 'react-icons/fa';
+
+declare global {
+  interface Window {
+    PaystackPop: any;
+  }
+}
+
+const Profile: React.FC = () => {
+  const { user, updateProfile, fetchProfile } = useAuth();
+
+  const [showEditName, setShowEditName] = useState(false);
+  const [showEditBio, setShowEditBio] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showManageSubscription, setShowManageSubscription] = useState(false);
+  const [showCancelFlow, setShowCancelFlow] = useState(false);
+  const [cancelStep, setCancelStep] = useState<1 | 2>(1);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [cancelOther, setCancelOther] = useState<string>('');
+  const [cancelUnderstand, setCancelUnderstand] = useState<boolean>(false);
+  const [subActive, setSubActive] = useState<boolean>(() => {
+    try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
+  });
+  const [subRef, setSubRef] = useState<string | null>(() => {
+    try { return localStorage.getItem('subscription_ref') || null; } catch { return null; }
+  });
+  const [subNextRenewal, setSubNextRenewal] = useState<string | null>(() => {
+    try { return localStorage.getItem('subscription_next_renewal') || null; } catch { return null; }
+  });
+
+  const [nameInput, setNameInput] = useState(user?.name || '');
+  const [bioInput, setBioInput] = useState(user?.bio || '');
+  const MAX_BIO = 300;
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Paystack config
+  const PAYSTACK_PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || 'pk_test_021c63210a1910a260b520b8bfa97cce19e996d8';
+  const PAYSTACK_PLAN_CODE = 'PLN_fx0dayx3idr67x1';
+  const [paystackReady, setPaystackReady] = useState(false);
+  // Load Paystack script early and mark ready on load
+  useEffect(() => {
+    const id = 'paystack-inline-js';
+    const existing = document.getElementById(id) as HTMLScriptElement | null;
+    if (existing) {
+      if ((window as any).PaystackPop) setPaystackReady(true);
+      else existing.addEventListener('load', () => setPaystackReady(true));
+      return;
+    }
+    const s = document.createElement('script');
+    s.id = id;
+    s.src = 'https://js.paystack.co/v1/inline.js';
+    s.async = true;
+    s.onload = () => setPaystackReady(true);
+    document.body.appendChild(s);
+  }, []);
+
+  const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+  const startSubscription = () => {
+    try {
+      if (!user?.email) {
+        setError('Sign in required to subscribe');
+        return;
+      }
+      if (!window.PaystackPop) {
+        setError('Payment library not loaded yet. Please wait a moment and try again.');
+        return;
+      }
+      const ref = createReference();
+      const handler = window.PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: user.email,
+        plan: PAYSTACK_PLAN_CODE,
+        ref,
+        callback: function(response: any) {
+          // Mark success in UI; for production, verify on server using secret key webhook
+          try {
+            localStorage.setItem('subscription_active', 'true');
+            localStorage.setItem('subscription_ref', response?.reference || ref);
+            const next = new Date();
+            next.setMonth(next.getMonth() + 1);
+            const nextStr = next.toISOString().slice(0,10);
+            localStorage.setItem('subscription_next_renewal', nextStr);
+          } catch(e) {}
+          setSubActive(true);
+          setSubRef(response?.reference || ref);
+          const n = new Date(); n.setMonth(n.getMonth() + 1);
+          setSubNextRenewal(n.toISOString().slice(0,10));
+          setShowManageSubscription(false);
+          setMessage('Subscription started successfully. Ref: ' + (response?.reference || ref));
+        },
+        onClose: function() {
+          setMessage('Payment window closed.');
+        }
+      });
+      handler.openIframe();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to initialize payment');
+    }
+  };
+
+
+  // Keep inputs in sync if profile changes elsewhere
+  useEffect(() => {
+    setNameInput(user?.name || '');
+    setBioInput(user?.bio || '');
+  }, [user?.name, user?.bio]);
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!user) return;
+    setUploading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const safety = setTimeout(() => setUploading(false), 10000);
+      // Validate
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.type)) {
+        throw new Error('Please upload a JPG, PNG, or WEBP image');
+      }
+      const maxBytes = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxBytes) {
+        throw new Error('Image must be 5MB or smaller');
+      }
+
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `avatars/${user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = data.publicUrl;
+      const { error: updErr } = await updateProfile({ avatar_url: publicUrl } as any);
+      if (updErr) throw updErr as any;
+      setMessage('Profile photo updated');
+      try { await fetchProfile(); } catch (_) {}
+      clearTimeout(safety);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to upload photo');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!user || !user?.avatar_url) return;
+    setUploading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const safety = setTimeout(() => setUploading(false), 8000);
+      // Best-effort delete of existing object if URL is public
+      try {
+        const url = user.avatar_url;
+        const marker = '/storage/v1/object/public/avatars/';
+        const idx = url.indexOf(marker);
+        if (idx !== -1) {
+          const key = url.substring(idx + marker.length);
+          await supabase.storage.from('avatars').remove([key]);
+        }
+      } catch (_) {}
+      const { error: updErr } = await updateProfile({ avatar_url: null as any });
+      if (updErr) throw updErr as any;
+      setMessage('Profile photo removed');
+      try { await fetchProfile(); } catch (_) {}
+      clearTimeout(safety);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to remove photo');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setError('Name cannot be empty');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { error: updErr } = await updateProfile({ name: trimmed } as any);
+      if (updErr) {
+        // Fallback: use SECURITY DEFINER RPC to upsert name without touching role
+        const { data: gu } = await supabase.auth.getUser();
+        const uid = gu?.user?.id;
+        const email = gu?.user?.email || user?.email || '';
+        if (uid) {
+          const { error: rpcErr } = await supabase.rpc('create_profile', {
+            p_id: uid,
+            p_name: trimmed,
+            p_email: email,
+            p_bio: null,
+            p_role: null,
+          });
+          if (rpcErr) throw rpcErr as any;
+        } else {
+          throw updErr as any;
+        }
+      }
+      setShowEditName(false);
+      setMessage('Name updated');
+      await fetchProfile();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update name');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveBio = async () => {
+    if (bioInput.length > MAX_BIO) {
+      setError(`Bio must be ${MAX_BIO} characters or fewer`);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { error: updErr } = await updateProfile({ bio: bioInput } as any);
+      if (updErr) throw updErr as any;
+      setShowEditBio(false);
+      setMessage('Bio updated');
+      await fetchProfile();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update bio');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { error: updErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updErr) throw updErr as any;
+      setShowChangePassword(false);
+      setMessage('Password updated');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to change password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 pt-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+        {/* Main card */}
+        <div className="lg:col-span-2 bg-white border rounded-2xl shadow-sm p-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6">Your Profile</h1>
+
+          {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded">{message}</div>}
+          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded">{error}</div>}
+
+          <div className="flex items-start gap-4 md:gap-6 flex-col sm:flex-row">
+            {/* Avatar */}
+            <div>
+              <div
+                className={`relative w-28 h-28 rounded-full overflow-hidden border bg-gray-100 cursor-pointer group ${uploading ? 'opacity-70' : ''}`}
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Change profile photo"
+                role="button"
+              >
+                                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                  ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <FaUser className="h-10 w-10" />
+                  </div>
+                )}
+                {/* Camera overlay */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition">
+                  <div className="text-white/90 text-xs px-2 py-1 rounded bg-black/50 hidden group-hover:block">Change</div>
+                </div>
+                {uploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+                    <svg className="animate-spin h-6 w-6 text-primary-600" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                  <FaImage /> Change Photo
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleAvatarUpload(f);
+                    }}
+                    disabled={uploading}
+                  />
+                </label>
+                {user?.avatar_url && (
+                  <button onClick={handleRemoveAvatar} disabled={uploading} className="px-3 py-2 border rounded-lg text-sm text-red-600 hover:bg-red-50">
+                    Remove
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-gray-500">JPG, PNG, or WEBP. Max 5MB.</p>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 space-y-5 w-full">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-sm text-gray-500">Name</div>
+                  <div className="text-lg font-semibold text-gray-900">{user?.name || '—'}</div>
+                </div>
+                                  <button onClick={() => { setNameInput(user?.name || ''); setShowEditName(true); }} className="inline-flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
+                  <FaEdit /> Edit
+                </button>
+              </div>
+
+              <div className="flex items-start justify-between">
+                <div className="max-w-prose">
+                  <div className="text-sm text-gray-500">Bio</div>
+                  <div className="text-gray-800 whitespace-pre-wrap">{user?.bio || 'Tell us about yourself.'}</div>
+                </div>
+                                  <button onClick={() => { setBioInput(user?.bio || ''); setShowEditBio(true); }} className="inline-flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
+                  <FaEdit /> Edit
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-gray-700">
+                <FaEnvelope />
+                <span>{user?.email || '—'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Side actions */}
+        <div className="space-y-6">
+          {/* Subscription */}
+          <div className="bg-white border rounded-2xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Subscription</h2>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-center justify-between">
+                <span>Plan</span>
+                <span className="font-medium text-primary-700">Membership (₦2,500 / month)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Status</span>
+                {subActive ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">Inactive</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Renews</span>
+                <span>{subActive ? (subNextRenewal || 'Next month') : '—'}</span>
+              </div>
+              {subRef && (
+                <div className="flex items-center justify-between">
+                  <span>Reference</span>
+                  <span className="text-xs text-gray-600">{subRef}</span>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowManageSubscription(true)} className={`mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+              subActive 
+                ? 'border rounded-lg hover:bg-gray-50' 
+                : 'bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+            }`}>
+              {subActive ? 'Manage Subscription' : 'Subscribe here'}
+            </button>
+            <button
+              onClick={() => {
+                try {
+                  setSubActive(localStorage.getItem('subscription_active') === 'true');
+                  setSubRef(localStorage.getItem('subscription_ref'));
+                  setSubNextRenewal(localStorage.getItem('subscription_next_renewal'));
+                  setMessage('Subscription status refreshed');
+                } catch {}
+              }}
+              className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              Refresh status
+            </button>
+          </div>
+
+          {/* Billing History */}
+          <div className="bg-white border rounded-2xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Billing History</h2>
+            <div className="space-y-3 text-sm">
+              {[{date:'2025-08-01', amount:2500, status:'Paid'}, {date:'2025-07-01', amount:2500, status:'Paid'}, {date:'2025-06-01', amount:2500, status:'Paid'}].map((i) => (
+                <div key={i.date} className="flex items-center justify-between">
+                  <div className="text-gray-700">{i.date}</div>
+                  <div className="text-gray-800 font-medium">₦{i.amount.toLocaleString()}</div>
+                  <div className="text-green-600">{i.status}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white border rounded-2xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Account</h2>
+            <button onClick={() => setShowChangePassword(true)} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50">
+              <FaKey /> Change Password
+            </button>
+          </div>
+          <div className="bg-white border rounded-2xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Tips</h2>
+            <p className="text-sm text-gray-600">Use a real name and a friendly bio so instructors and peers can recognize you.</p>
+          </div>
+        </div>
+
+        {/* Edit Name Modal */}
+        {showEditName && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowEditName(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Edit Name</h3>
+                <button onClick={() => setShowEditName(false)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button>
+              </div>
+              <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} className="w-full px-3 py-2 border rounded mb-4" />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowEditName(false)} className="px-4 py-2 border rounded">Cancel</button>
+                <button onClick={handleSaveName} disabled={saving || !nameInput.trim()} className={`px-4 py-2 rounded text-white ${(!saving && nameInput.trim()) ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}>
+                  {saving ? (
+                    <svg className="inline mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                  ) : (
+                    <FaSave className="inline mr-2" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Bio Modal */}
+        {showEditBio && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowEditBio(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Edit Bio</h3>
+                <button onClick={() => setShowEditBio(false)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button>
+              </div>
+              <textarea
+                value={bioInput}
+                onChange={(e) => setBioInput(e.target.value.slice(0, MAX_BIO))}
+                rows={5}
+                className="w-full px-3 py-2 border rounded mb-2"
+              />
+              <div className="text-xs text-gray-500 mb-2 text-right">{bioInput.length}/{MAX_BIO}</div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowEditBio(false)} className="px-4 py-2 border rounded">Cancel</button>
+                <button onClick={handleSaveBio} disabled={saving} className={`px-4 py-2 rounded text-white ${!saving ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}>
+                  {saving ? (
+                    <svg className="inline mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                  ) : (
+                    <FaSave className="inline mr-2" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Change Password Modal */}
+        {showChangePassword && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowChangePassword(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Change Password</h3>
+                <button onClick={() => setShowChangePassword(false)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button>
+              </div>
+              <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border rounded mb-3" />
+              <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border rounded mb-4" />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowChangePassword(false)} className="px-4 py-2 border rounded">Cancel</button>
+                <button onClick={handleChangePassword} disabled={saving || !newPassword || newPassword !== confirmPassword} className={`px-4 py-2 rounded text-white ${(!saving && newPassword && newPassword === confirmPassword) ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}>
+                  <FaSave className="inline mr-2" /> Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Manage Subscription Modal */}
+        {showManageSubscription && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowManageSubscription(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">{subActive ? 'Manage Subscription' : 'Subscribe to Access'}</h3>
+                <button onClick={() => setShowManageSubscription(false)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button>
+              </div>
+              <div className="space-y-3 text-sm text-gray-700">
+                <div className="flex items-center justify-between">
+                  <span>Current Plan</span>
+                  <span className="font-medium">Membership</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Billing Cycle</span>
+                  <span>Monthly</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Amount</span>
+                  <span>₦2,500</span>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-2">
+                <button
+                  onClick={startSubscription}
+                  disabled={!paystackReady || subActive}
+                  className={`px-4 py-2 rounded-lg ${paystackReady && !subActive ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-gray-300 text-white cursor-not-allowed'} border-0`}
+                >
+                  {paystackReady ? (subActive ? 'Update subscription' : 'Subscribe Now') : 'Loading payment...'}
+                </button>
+                <button
+                  disabled={!subActive}
+                  className={`px-4 py-2 border rounded-lg ${subActive ? 'hover:bg-red-50 text-red-600' : 'text-gray-400 cursor-not-allowed'} `}
+                  onClick={() => { if (!subActive) return; setShowCancelFlow(true); setCancelStep(1); setCancelReason(''); setCancelOther(''); setCancelUnderstand(false); }}
+                >
+                  Cancel subscription
+                </button>
+              </div>
+              <p className="mt-4 text-xs text-gray-500">Note: This is a preview UI. Integrate your payment provider to make these actions live.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Subscription Flow */}
+        {showCancelFlow && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowCancelFlow(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Cancel Subscription</h3>
+                <button onClick={() => setShowCancelFlow(false)} className="text-gray-500 hover:text-gray-700"><FaTimes /></button>
+              </div>
+
+              {cancelStep === 1 && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700">We’re sorry to see you go. Please tell us why you’re canceling:</p>
+                  <div className="space-y-2 text-sm">
+                    {['Too expensive', 'Not using enough', 'Technical issues', 'Other'].map((opt) => (
+                      <label key={opt} className="flex items-center gap-2">
+                        <input type="radio" name="cancel-reason" checked={cancelReason === opt} onChange={() => setCancelReason(opt)} />
+                        <span>{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {cancelReason === 'Other' && (
+                    <input
+                      placeholder="Please share a brief reason"
+                      value={cancelOther}
+                      onChange={(e) => setCancelOther(e.target.value)}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowCancelFlow(false)} className="px-4 py-2 border rounded">Back</button>
+                    <button
+                      onClick={() => setCancelStep(2)}
+                      disabled={cancelReason === '' || (cancelReason === 'Other' && !cancelOther.trim())}
+                      className={`px-4 py-2 rounded text-white ${cancelReason !== '' && (cancelReason !== 'Other' || cancelOther.trim()) ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {cancelStep === 2 && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700">Before you cancel, please confirm:</p>
+                  <label className="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={cancelUnderstand} onChange={(e) => setCancelUnderstand(e.target.checked)} />
+                    <span>I understand my membership benefits will end at the close of my billing period.</span>
+                  </label>
+                  <div className="flex justify-between gap-2">
+                    <button onClick={() => setCancelStep(1)} className="px-4 py-2 border rounded">Back</button>
+                    <button
+                      onClick={() => {
+                        try {
+                          localStorage.setItem('subscription_active', 'false');
+                          localStorage.removeItem('subscription_ref');
+                          localStorage.removeItem('subscription_next_renewal');
+                          setSubActive(false);
+                          setSubRef(null);
+                          setSubNextRenewal(null);
+                          setMessage('Subscription canceled. You will retain access until the end of the current billing period.');
+                        } catch {}
+                        setShowCancelFlow(false);
+                        setShowManageSubscription(false);
+                      }}
+                      disabled={!cancelUnderstand}
+                      className={`px-4 py-2 rounded text-white ${cancelUnderstand ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                    >
+                      Confirm Cancel
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">Note: In production, cancellation should be processed with your payment provider and verified on your server.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
+export default Profile;
+
+
