@@ -73,19 +73,23 @@ const Profile: React.FC = () => {
 
   const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
-  // Function to verify payment on server (implement in your backend)
+  // Function to verify payment on server
   const verifyPaymentOnServer = async (reference: string, userId: string) => {
     try {
-      // This should call your backend API to verify the payment
-      // const response = await fetch('/api/verify-payment', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ reference, userId })
-      // });
-      // const result = await response.json();
-      // if (!result.success) throw new Error(result.message);
+      const response = await fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference, userId })
+      });
       
-      console.log('Payment verification would be sent to server:', { reference, userId });
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Payment verified successfully on server:', result.data);
+        // You can add additional logic here if needed
+      } else {
+        console.warn('Payment verification warning:', result.message);
+      }
     } catch (error) {
       console.error('Payment verification failed:', error);
       // Don't show error to user as payment was successful
@@ -630,9 +634,9 @@ const Profile: React.FC = () => {
                 </button>
               </div>
               <p className="mt-4 text-xs text-gray-500">
-                💡 <strong>Setup Required:</strong> Configure your Paystack credentials in the .env file to enable live payments.
+                💳 <strong>Test Mode:</strong> Using Paystack test environment. Use test card: 4084 0840 8408 4081
                 <br />
-                📧 <strong>Support:</strong> Contact support if you need help setting up payments.
+                📧 <strong>Support:</strong> Contact support if you need help with payments.
               </p>
             </div>
           </div>
