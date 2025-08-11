@@ -267,6 +267,25 @@ const CourseView: React.FC = () => {
           .youtube-player-wrapper {
             background: #000;
           }
+          
+          /* Hide bottom area where "Watch on YouTube" appears */
+          .youtube-player-wrapper::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: #000;
+            z-index: 3;
+            pointer-events: none;
+          }
+          
+          /* Additional masking for YouTube branding */
+          .youtube-player-wrapper iframe {
+            mask-image: linear-gradient(to bottom, transparent 0%, transparent 85%, black 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 85%, black 100%);
+          }
         `}
       </style>
       <div className="min-h-screen bg-gray-50 pt-24">
@@ -348,7 +367,7 @@ const CourseView: React.FC = () => {
                   ⚠️ YouTube warnings in console are normal and don't affect functionality
                 </span>
                 <span className="ml-2 text-xs text-green-600">
-                  ✨ Clean player: No "Watch on YouTube" button or video suggestions
+                  ✨ Clean player: Aggressive YouTube branding removal
                 </span>
               </p>
               {selectedVideo ? (
