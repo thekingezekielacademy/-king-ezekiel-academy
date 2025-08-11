@@ -268,28 +268,6 @@ const AdminCourses: React.FC = () => {
               <h3 className="text-lg leading-6 font-medium text-gray-900">
                 Courses ({filteredCourses.length})
               </h3>
-              <div className="text-sm text-gray-600">
-                <span className="mr-4">
-                  📊 Total Duration: <span className="font-medium text-blue-600">
-                    {filteredCourses.reduce((total, course) => {
-                      const [minutes, seconds] = (course.totalDuration || '0:00').split(':').map(Number);
-                      return total + (minutes * 60) + (seconds || 0);
-                    }, 0) / 60 > 1 
-                      ? `${Math.floor(filteredCourses.reduce((total, course) => {
-                          const [minutes, seconds] = (course.totalDuration || '0:00').split(':').map(Number);
-                          return total + (minutes * 60) + (seconds || 0);
-                        }, 0) / 60)}h ${filteredCourses.reduce((total, course) => {
-                          const [minutes, seconds] = (course.totalDuration || '0:00').split(':').map(Number);
-                          return total + (minutes * 60) + (seconds || 0);
-                        }, 0) % 60}m`
-                      : `${filteredCourses.reduce((total, course) => {
-                          const [minutes, seconds] = (course.totalDuration || '0:00').split(':').map(Number);
-                          return total + (minutes * 60) + (seconds || 0);
-                        }, 0)}m`
-                    }
-                  </span>
-                </span>
-              </div>
             </div>
 
             {filteredCourses.length === 0 ? (

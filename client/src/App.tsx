@@ -16,6 +16,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminAddCourseWizard from './pages/admin/AdminAddCourseWizard';
 import AdminCourses from './pages/admin/AdminCourses';
+import EditCourse from './pages/admin/EditCourse';
 import AddCourse from './pages/admin/AddCourse';
 import Profile from './pages/Profile';
 import CourseOverview from './pages/course/CourseOverview';
@@ -42,6 +43,7 @@ function App() {
               <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
               <Route path="/admin/courses" element={<AdminRoute><AdminCourses /></AdminRoute>} />
               <Route path="/admin/courses/new" element={<AdminRoute><AdminAddCourseWizard /></AdminRoute>} />
+              <Route path="/admin/courses/:courseId/edit" element={<AdminRoute><EditCourse /></AdminRoute>} />
               <Route path="/admin/add-course" element={<AdminRoute><AddCourse /></AdminRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/course/:id" element={<ProtectedRoute><CourseOverview /></ProtectedRoute>} />
