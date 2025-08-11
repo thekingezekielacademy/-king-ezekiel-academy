@@ -140,6 +140,10 @@ const AdminCourses: React.FC = () => {
     navigate(`/admin/courses/${courseId}/edit`);
   };
 
+  const handleViewCourse = (courseId: string) => {
+    navigate(`/admin/courses/${courseId}/view`);
+  };
+
   const handleDeleteCourse = async (courseId: string) => {
     if (window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
       try {
@@ -340,6 +344,12 @@ const AdminCourses: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleViewCourse(course.id)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              View
+                            </button>
                             <button
                               onClick={() => handleEditCourse(course.id)}
                               className="text-indigo-600 hover:text-indigo-900"
