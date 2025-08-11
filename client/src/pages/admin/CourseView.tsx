@@ -119,8 +119,21 @@ const CourseView: React.FC = () => {
     }
     
     if (videoId) {
-      // Return embed URL with enhanced parameters to reduce warnings
-      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=0&origin=${window.location.origin}`;
+      // Return embed URL with parameters to remove YouTube branding and suggestions
+      // rel=0: No related videos at end
+      // modestbranding=1: Minimal YouTube branding
+      // showinfo=0: No video title/info overlay
+      // enablejsapi=0: Disable JavaScript API (reduces warnings)
+      // origin: Security origin for the embed
+      // controls=1: Show video controls
+      // disablekb=0: Enable keyboard controls
+      // fs=1: Enable fullscreen button
+      // iv_load_policy=3: Disable video annotations
+      // cc_load_policy=0: Disable closed captions by default
+      // autoplay=0: Don't autoplay
+      // loop=0: Don't loop
+      // playlist: Prevents "Watch on YouTube" button
+      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=0&origin=${window.location.origin}&controls=1&disablekb=0&fs=1&iv_load_policy=3&cc_load_policy=0&autoplay=0&loop=0&playlist=${videoId}`;
     }
     
     return url; // Fallback to original URL if parsing fails
@@ -236,6 +249,9 @@ const CourseView: React.FC = () => {
                 Preview videos exactly as students will see them
                 <span className="ml-2 text-xs text-amber-600">
                   ⚠️ YouTube warnings in console are normal and don't affect functionality
+                </span>
+                <span className="ml-2 text-xs text-green-600">
+                  ✨ Clean player: No "Watch on YouTube" button or video suggestions
                 </span>
               </p>
               {selectedVideo ? (
