@@ -344,7 +344,7 @@ const CourseView: React.FC = () => {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className={`font-medium truncate ${
-                                selectedVideo?.id === video.id ? 'text-indigo-900' : 'text-gray-900'
+                                selectedVideo?.id === video.id ? 'text-indigo-900' : 'text-indigo-900'
                               }`}>
                                 {video.name}
                               </p>
