@@ -75,6 +75,42 @@ const CourseView: React.FC = () => {
     fetchCourseData();
   }, [fetchCourseData]);
 
+  // Handle YouTube player postMessage to hide branding elements
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Only handle messages from YouTube
+      if (event.origin !== 'https://www.youtube.com') return;
+      
+      try {
+        const data = JSON.parse(event.data);
+        
+        // When player is ready, send commands to hide elements
+        if (data.event === 'onReady') {
+          const iframe = document.querySelector('.youtube-player-wrapper iframe');
+          if (iframe && iframe.contentWindow) {
+            // Send commands to hide YouTube branding
+            iframe.contentWindow.postMessage(JSON.stringify({
+              event: 'command',
+              func: 'setOption',
+              args: ['modestbranding', true]
+            }), 'https://www.youtube.com');
+            
+            iframe.contentWindow.postMessage(JSON.stringify({
+              event: 'command',
+              func: 'setOption',
+              args: ['showinfo', false]
+            }), 'https://www.youtube.com');
+          }
+        }
+      } catch (error) {
+        // Ignore parsing errors
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const getLevelBadge = (level: string) => {
     const levelConfig = {
       beginner: { color: 'bg-green-100 text-green-800', text: 'Lv 1 – Beginner' },
@@ -119,11 +155,11 @@ const CourseView: React.FC = () => {
     }
     
     if (videoId) {
-      // Return embed URL with parameters to remove YouTube branding and suggestions
+      // Return embed URL with aggressive parameters to remove ALL YouTube branding
       // rel=0: No related videos at end
       // modestbranding=1: Minimal YouTube branding
       // showinfo=0: No video title/info overlay
-      // enablejsapi=0: Disable JavaScript API (reduces warnings)
+      // enablejsapi=1: Enable JavaScript API for control
       // origin: Security origin for the embed
       // controls=1: Show video controls
       // disablekb=0: Enable keyboard controls
@@ -133,7 +169,10 @@ const CourseView: React.FC = () => {
       // autoplay=0: Don't autoplay
       // loop=0: Don't loop
       // playlist: Prevents "Watch on YouTube" button
-      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=0&origin=${window.location.origin}&controls=1&disablekb=0&fs=1&iv_load_policy=3&cc_load_policy=0&autoplay=0&loop=0&playlist=${videoId}`;
+      // hl=en: Force English language
+      // color=white: White progress bar
+      // start=0: Start from beginning
+      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=1&origin=${window.location.origin}&controls=1&disablekb=0&fs=1&iv_load_policy=3&cc_load_policy=0&autoplay=0&loop=0&playlist=${videoId}&hl=en&color=white&start=0`;
     }
     
     return url; // Fallback to original URL if parsing fails
@@ -172,8 +211,66 @@ const CourseView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <>
+      <style>
+        {`
+          .youtube-player-wrapper {
+            position: relative;
+            overflow: hidden;
+          }
+          
+          .youtube-player-wrapper iframe {
+            position: relative;
+            z-index: 1;
+          }
+          
+          /* Aggressive CSS to hide ALL YouTube branding elements */
+          .youtube-player-wrapper iframe[src*="youtube.com"] {
+            filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='a'%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0'/%3E%3C/filter%3E%3C/svg%3E#a");
+          }
+          
+          /* Hide YouTube branding overlay */
+          .youtube-player-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 2;
+            background: transparent;
+          }
+          
+          /* Hide specific YouTube elements using CSS */
+          .youtube-player-wrapper iframe[src*="youtube.com"] + * {
+            display: none !important;
+          }
+          
+          /* Additional YouTube element hiding */
+          .youtube-player-wrapper iframe[src*="youtube.com"] ~ * {
+            display: none !important;
+          }
+          
+          /* Force hide YouTube branding */
+          .youtube-player-wrapper iframe[src*="youtube.com"] {
+            -webkit-filter: none !important;
+            filter: none !important;
+          }
+          
+          /* Hide YouTube controls that show branding */
+          .youtube-player-wrapper iframe[src*="youtube.com"] {
+            pointer-events: auto;
+          }
+          
+          /* Ensure no YouTube branding shows through */
+          .youtube-player-wrapper {
+            background: #000;
+          }
+        `}
+      </style>
+      <div className="min-h-screen bg-gray-50 pt-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -260,17 +357,19 @@ const CourseView: React.FC = () => {
                   <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden">
                     {selectedVideo.link.includes('youtube.com') || selectedVideo.link.includes('youtu.be') ? (
                       <div className="relative w-full h-full">
-                        <iframe
-                          src={getYouTubeEmbedUrl(selectedVideo.link)}
-                          title={selectedVideo.name}
-                          className="w-full h-full"
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          loading="lazy"
-                          onLoad={() => console.log('YouTube video loaded successfully')}
-                          onError={() => console.error('Failed to load YouTube video')}
-                        />
+                        <div className="youtube-player-wrapper">
+                          <iframe
+                            src={getYouTubeEmbedUrl(selectedVideo.link)}
+                            title={selectedVideo.name}
+                            className="w-full h-full"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                            onLoad={() => console.log('YouTube video loaded successfully')}
+                            onError={() => console.error('Failed to load YouTube video')}
+                          />
+                        </div>
                         <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
                           YouTube Preview
                         </div>
