@@ -35,11 +35,57 @@ const AdminAddCourseWizard: React.FC = () => {
     videos: []
   });
 
-  const [newVideo, setNewVideo] = useState({
-    name: '',
-    duration: '',
-    link: ''
-  });
+  const [newVideo, setNewVideo] = useState({ name: '', duration: '', link: '' });
+  const [draggedVideoIndex, setDraggedVideoIndex] = useState<number | null>(null);
+
+  // Drag and drop functionality
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedVideoIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleVideoDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleVideoDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedVideoIndex === null || draggedVideoIndex === dropIndex) return;
+
+    setCourseData(prev => {
+      const newVideos = [...prev.videos];
+      const draggedVideo = newVideos[draggedVideoIndex];
+      
+      // Remove dragged video from original position
+      newVideos.splice(draggedVideoIndex, 1);
+      
+      // Insert at new position
+      newVideos.splice(dropIndex, 0, draggedVideo);
+      
+      return { ...prev, videos: newVideos };
+    });
+    
+    setDraggedVideoIndex(null);
+  };
+
+  const moveVideoUp = (index: number) => {
+    if (index === 0) return;
+    setCourseData(prev => {
+      const newVideos = [...prev.videos];
+      [newVideos[index], newVideos[index - 1]] = [newVideos[index - 1], newVideos[index]];
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  const moveVideoDown = (index: number) => {
+    setCourseData(prev => {
+      if (index === prev.videos.length - 1) return prev;
+      const newVideos = [...prev.videos];
+      [newVideos[index], newVideos[index + 1]] = [newVideos[index + 1], newVideos[index]];
+      return { ...prev, videos: newVideos };
+    });
+  };
 
   const handleInputChange = (field: keyof CourseData, value: string) => {
     setCourseData(prev => ({ ...prev, [field]: value }));
@@ -354,7 +400,15 @@ const AdminAddCourseWizard: React.FC = () => {
           
           <div className="divide-y divide-gray-200">
             {courseData.videos.map((video, index) => (
-              <div key={video.id} className="px-6 py-4 flex items-center justify-between">
+              <div
+                key={video.id}
+                className="px-6 py-4 flex items-center justify-between"
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={handleVideoDragOver}
+                onDrop={(e) => handleVideoDrop(e, index)}
+                onDragEnd={() => setDraggedVideoIndex(null)}
+              >
                 <div className="flex items-center space-x-4">
                   <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-semibold">
                     {index + 1}
@@ -366,12 +420,28 @@ const AdminAddCourseWizard: React.FC = () => {
                   </div>
                 </div>
                 
-                <button
-                  onClick={() => removeVideo(video.id)}
-                  className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => moveVideoUp(index)}
+                    className="text-gray-600 hover:text-gray-800 transition-colors duration-200"
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => moveVideoDown(index)}
+                    className="text-gray-600 hover:text-gray-800 transition-colors duration-200"
+                    disabled={index === courseData.videos.length - 1}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => removeVideo(video.id)}
+                    className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>

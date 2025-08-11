@@ -19,6 +19,7 @@ interface CourseData {
 }
 
 const EditCourse: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,8 +37,11 @@ const EditCourse: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [newVideo, setNewVideo] = useState({ name: '', duration: '', link: '' });
   const [isDragOver, setIsDragOver] = useState(false);
+  const [draggedVideoIndex, setDraggedVideoIndex] = useState<number | null>(null);
 
   const fetchCourseData = useCallback(async () => {
+    if (!courseId) return;
+    
     try {
       setLoading(true);
       
@@ -49,6 +53,13 @@ const EditCourse: React.FC = () => {
         .single();
 
       if (courseError) throw courseError;
+
+      // Check if user can edit this course
+      if (user?.role !== 'admin' && course.created_by !== user?.id) {
+        setError('You do not have permission to edit this course');
+        setLoading(false);
+        return;
+      }
 
       // Fetch course videos
       const { data: videos, error: videosError } = await supabase
@@ -72,13 +83,13 @@ const EditCourse: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, user?.id, user?.role]);
 
   useEffect(() => {
-    if (courseId) {
+    if (courseId && user) {
       fetchCourseData();
     }
-  }, [courseId, fetchCourseData]);
+  }, [courseId, user, fetchCourseData]);
 
   const handleInputChange = (field: keyof CourseData, value: string) => {
     setCourseData(prev => ({ ...prev, [field]: value }));
@@ -105,17 +116,66 @@ const EditCourse: React.FC = () => {
     }));
   };
 
+  // Drag and drop functionality
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedVideoIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedVideoIndex === null || draggedVideoIndex === dropIndex) return;
+
+    setCourseData(prev => {
+      const newVideos = [...prev.videos];
+      const draggedVideo = newVideos[draggedVideoIndex];
+      
+      // Remove dragged video from original position
+      newVideos.splice(draggedVideoIndex, 1);
+      
+      // Insert at new position
+      newVideos.splice(dropIndex, 0, draggedVideo);
+      
+      return { ...prev, videos: newVideos };
+    });
+    
+    setDraggedVideoIndex(null);
+  };
+
+  const moveVideoUp = (index: number) => {
+    if (index === 0) return;
+    setCourseData(prev => {
+      const newVideos = [...prev.videos];
+      [newVideos[index], newVideos[index - 1]] = [newVideos[index - 1], newVideos[index]];
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  const moveVideoDown = (index: number) => {
+    setCourseData(prev => {
+      if (index === prev.videos.length - 1) return prev;
+      const newVideos = [...prev.videos];
+      [newVideos[index], newVideos[index + 1]] = [newVideos[index + 1], newVideos[index]];
+      return { ...prev, videos: newVideos };
+    });
+  };
+
+  const handleFileDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleFileDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     
@@ -138,16 +198,64 @@ const EditCourse: React.FC = () => {
       setError('');
       setSuccess('');
 
-      if (!courseData.title || !courseData.description || courseData.videos.length === 0) {
-        setError('Please fill in all required fields and add at least one video');
+      console.log('Starting course update...', { courseId, courseData });
+
+      if (!courseId) {
+        setError('Course ID is missing');
+        setLoading(false);
         return;
       }
+
+      if (!user) {
+        setError('You must be logged in to edit courses');
+        setLoading(false);
+        return;
+      }
+
+      if (!courseData.title || !courseData.description || courseData.videos.length === 0) {
+        setError('Please fill in all required fields and add at least one video');
+        setLoading(false);
+        return;
+      }
+
+      // Test database connection
+      console.log('Testing database connection...');
+      const { data: testData, error: testError } = await supabase
+        .from('courses')
+        .select('id, created_by')
+        .eq('id', courseId)
+        .limit(1);
+
+      if (testError) {
+        console.error('Database connection test failed:', testError);
+        setError(`Database connection failed: ${testError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!testData || testData.length === 0) {
+        console.error('Course not found in database');
+        setError('Course not found in database');
+        setLoading(false);
+        return;
+      }
+
+      // Check if user has permission to edit this course
+      if (user?.role !== 'admin' && testData[0].created_by !== user?.id) {
+        console.error('User does not have permission to edit this course');
+        setError('You do not have permission to edit this course');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Database connection test successful, course found, user has permission');
 
       let coverPhotoUrl = undefined;
 
       // Upload cover photo if provided
       if (courseData.coverPhoto) {
         try {
+          console.log('Uploading cover photo...');
           const fileExt = courseData.coverPhoto.name.split('.').pop();
           const fileName = `${Date.now()}.${fileExt}`;
           const filePath = `course-covers/${fileName}`;
@@ -163,6 +271,7 @@ const EditCourse: React.FC = () => {
               .from('course-covers')
               .getPublicUrl(filePath);
             coverPhotoUrl = publicUrl;
+            console.log('Cover photo uploaded successfully:', coverPhotoUrl);
           }
         } catch (uploadErr) {
           console.warn('Cover photo upload failed, continuing without it:', uploadErr);
@@ -170,6 +279,7 @@ const EditCourse: React.FC = () => {
       }
 
       // Update the course
+      console.log('Updating course in database...');
       const { error: courseError } = await supabase
         .from('courses')
         .update({
@@ -180,30 +290,91 @@ const EditCourse: React.FC = () => {
         })
         .eq('id', courseId);
 
-      if (courseError) throw courseError;
+      if (courseError) {
+        console.error('Course update error:', courseError);
+        throw courseError;
+      }
+      console.log('Course updated successfully');
 
-      // Delete existing videos
-      const { error: deleteError } = await supabase
+      // Instead of deleting and re-inserting, let's update existing videos
+      console.log('Updating existing videos...');
+      
+      // Get existing videos to see what needs to be updated
+      const { data: existingVideos, error: fetchVideosError } = await supabase
         .from('course_videos')
-        .delete()
-        .eq('course_id', courseId);
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index');
 
-      if (deleteError) throw deleteError;
+      if (fetchVideosError) {
+        console.error('Error fetching existing videos:', fetchVideosError);
+        throw fetchVideosError;
+      }
 
-      // Insert new videos
-      const videosToInsert = courseData.videos.map((video, index) => ({
-        course_id: courseId,
-        name: video.name,
-        duration: video.duration,
-        link: video.link,
-        order_index: index
-      }));
+      console.log('Existing videos:', existingVideos);
+      console.log('New videos to set:', courseData.videos);
 
-      const { error: videosError } = await supabase
-        .from('course_videos')
-        .insert(videosToInsert);
+      // Update or insert videos as needed
+      for (let i = 0; i < courseData.videos.length; i++) {
+        const video = courseData.videos[i];
+        const existingVideo = existingVideos[i];
 
-      if (videosError) throw videosError;
+        if (existingVideo) {
+          // Update existing video
+          console.log(`Updating video ${i}:`, existingVideo.id);
+          const { error: updateError } = await supabase
+            .from('course_videos')
+            .update({
+              name: video.name,
+              duration: video.duration,
+              link: video.link,
+              order_index: i
+            })
+            .eq('id', existingVideo.id);
+
+          if (updateError) {
+            console.error(`Error updating video ${i}:`, updateError);
+            throw updateError;
+          }
+        } else {
+          // Insert new video
+          console.log(`Inserting new video ${i}:`, video);
+          const { error: insertError } = await supabase
+            .from('course_videos')
+            .insert({
+              course_id: courseId,
+              name: video.name,
+              duration: video.duration,
+              link: video.link,
+              order_index: i
+            });
+
+          if (insertError) {
+            console.error(`Error inserting video ${i}:`, insertError);
+            throw insertError;
+          }
+        }
+      }
+
+      // Remove extra videos if we have fewer new videos
+      if (existingVideos.length > courseData.videos.length) {
+        console.log('Removing extra videos...');
+        const videosToRemove = existingVideos.slice(courseData.videos.length);
+        for (const video of videosToRemove) {
+          console.log(`Removing video:`, video.id);
+          const { error: deleteError } = await supabase
+            .from('course_videos')
+            .delete()
+            .eq('id', video.id);
+
+          if (deleteError) {
+            console.error(`Error deleting video ${video.id}:`, deleteError);
+            throw deleteError;
+          }
+        }
+      }
+
+      console.log('All videos updated successfully');
 
       setSuccess('Course updated successfully!');
       setTimeout(() => {
@@ -212,7 +383,7 @@ const EditCourse: React.FC = () => {
 
     } catch (err) {
       console.error('Error updating course:', err);
-      setError('Failed to update course');
+      setError(`Failed to update course: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -379,18 +550,43 @@ const EditCourse: React.FC = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">Current Videos ({courseData.videos.length})</h3>
               <div className="space-y-3">
                 {courseData.videos.map((video, index) => (
-                  <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                  <div
+                    key={video.id || index} // Use video.id if available, otherwise index
+                    className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
+                    draggable={true}
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={() => setDraggedVideoIndex(null)}
+                  >
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">{video.name}</p>
                       <p className="text-sm text-gray-600">Duration: {video.duration}</p>
                       <p className="text-sm text-gray-600 truncate">Link: {video.link}</p>
                     </div>
-                    <button
-                      onClick={() => removeVideo(index)}
-                      className="ml-4 px-3 py-1 text-red-600 hover:text-red-800 text-sm font-medium"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => moveVideoUp(index)}
+                        className="p-2 text-gray-600 hover:text-gray-800 rounded-full hover:bg-gray-200"
+                        title="Move up"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                      </button>
+                      <button
+                        onClick={() => moveVideoDown(index)}
+                        className="p-2 text-gray-600 hover:text-gray-800 rounded-full hover:bg-gray-200"
+                        title="Move down"
+                      >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      <button
+                        onClick={() => removeVideo(index)}
+                        className="ml-4 px-3 py-1 text-red-600 hover:text-red-800 text-sm font-medium"
+                        title="Remove"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -406,9 +602,9 @@ const EditCourse: React.FC = () => {
             className={`border-2 border-dashed rounded-lg p-6 text-center ${
               isDragOver ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'
             }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={handleFileDragOver}
+            onDragLeave={handleFileDragLeave}
+            onDrop={handleFileDrop}
           >
             <input
               ref={fileInputRef}
