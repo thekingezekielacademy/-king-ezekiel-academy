@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import AdvancedVideoPlayer from '../../components/AdvancedVideoPlayer';
 
 interface Video {
   id: string;
@@ -25,52 +26,63 @@ const CourseView: React.FC = () => {
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId: string }>();
   
+  console.log('CourseView render:', { courseId });
+  
   const [course, setCourse] = useState<Course | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
 
-  const fetchCourseData = useCallback(async () => {
-    if (!courseId) return;
-    
-    try {
-      setLoading(true);
-      setError('');
 
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('id', courseId)
-        .single();
 
-      if (courseError) throw courseError;
+  useEffect(() => {
+    console.log('useEffect triggered with courseId:', courseId);
+    if (courseId) {
+      // Define the fetch function inline to avoid dependency issues
+      const fetchData = async () => {
+        console.log('Starting to fetch data for courseId:', courseId);
+        try {
+          setLoading(true);
+          setError('');
 
-      const { data: videosData, error: videosError } = await supabase
-        .from('course_videos')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('order_index');
+          const { data: courseData, error: courseError } = await supabase
+            .from('courses')
+            .select('*')
+            .eq('id', courseId)
+            .single();
 
-      if (videosError) throw videosError;
+          if (courseError) throw courseError;
+          console.log('Course data fetched:', courseData);
 
-      setCourse(courseData);
-      setVideos(videosData || []);
-      
-      if (videosData && videosData.length > 0) {
-        setSelectedVideo(videosData[0]);
-      }
-    } catch (err) {
-      console.error('Error fetching course:', err);
-      setError('Failed to load course data');
-    } finally {
-      setLoading(false);
+          const { data: videosData, error: videosError } = await supabase
+            .from('course_videos')
+            .select('*')
+            .eq('course_id', courseId)
+            .order('order_index');
+
+          if (videosError) throw videosError;
+          console.log('Videos data fetched:', videosData);
+
+          setCourse(courseData);
+          setVideos(videosData || []);
+          
+          if (videosData && videosData.length > 0) {
+            setSelectedVideo(videosData[0]);
+          }
+        } catch (err) {
+          console.error('Error fetching course:', err);
+          setError('Failed to load course data');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchData();
     }
   }, [courseId]);
 
-  useEffect(() => {
-    fetchCourseData();
-  }, [fetchCourseData]);
+
 
   const getLevelBadge = (level: string) => {
     const levelConfig = {
@@ -90,6 +102,13 @@ const CourseView: React.FC = () => {
     );
   };
 
+  // Helper function to extract YouTube video ID from URL
+  const getYouTubeVideoId = (url: string): string => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return match && match[2].length === 11 ? match[2] : url;
+  };
+
   const formatDuration = (duration: string) => {
     if (duration.includes(':')) {
       return duration;
@@ -103,21 +122,11 @@ const CourseView: React.FC = () => {
     return duration;
   };
 
-  const getYouTubeEmbedUrl = (url: string): string => {
-    let videoId = '';
-    
-    if (url.includes('youtube.com/watch?v=')) {
-      videoId = url.split('v=')[1]?.split('&')[0] || '';
-    } else if (url.includes('youtu.be/')) {
-      videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
-    }
-    
-    if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&enablejsapi=1&origin=${window.location.origin}&controls=1&disablekb=0&fs=1&iv_load_policy=3&cc_load_policy=0&autoplay=0&loop=0&playlist=${videoId}&hl=en&color=white&start=0`;
-    }
-    
-    return url;
+  const isYouTubeVideo = (url: string): boolean => {
+    return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('youtube-nocookie.com');
   };
+
+
 
   if (loading) {
     return (
@@ -153,44 +162,7 @@ const CourseView: React.FC = () => {
 
   return (
     <>
-      <style>
-        {`
-          .youtube-player-wrapper {
-            position: relative;
-            overflow: hidden;
-            background: #000;
-          }
-          
-          .youtube-player-wrapper iframe {
-            position: relative;
-            z-index: 1;
-          }
-          
-          .youtube-player-wrapper::before {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background: #000;
-            z-index: 3;
-            pointer-events: none;
-          }
-          
-          .youtube-player-wrapper::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            z-index: 2;
-            background: transparent;
-          }
-        `}
-      </style>
+
       <div className="min-h-screen bg-gray-50 pt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-8">
@@ -262,46 +234,44 @@ const CourseView: React.FC = () => {
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">Lesson Player</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Preview videos exactly as students will see them
-                  <span className="ml-2 text-xs text-amber-600">
-                    ⚠️ YouTube warnings in console are normal
-                  </span>
                   <span className="ml-2 text-xs text-green-600">
-                    ✨ Clean player: YouTube branding removal
+                    ✨ YouTube streaming player with zero branding
+                  </span>
+                  <span className="ml-2 text-xs text-blue-600">
+                    💡 Use unlisted YouTube videos to prevent suggestions
                   </span>
                 </p>
                 {selectedVideo ? (
                   <div>
                     <h4 className="text-lg font-medium text-gray-900 mb-4">{selectedVideo.name}</h4>
-                    <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden">
-                      {selectedVideo.link.includes('youtube.com') || selectedVideo.link.includes('youtu.be') ? (
-                        <div className="relative w-full h-full">
-                          <div className="youtube-player-wrapper">
-                            <iframe
-                              src={getYouTubeEmbedUrl(selectedVideo.link)}
-                              title={selectedVideo.name}
-                              className="w-full h-full"
-                              frameBorder="0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                              loading="lazy"
-                            />
+                                          <div className="w-full bg-gray-100 rounded-lg mb-4 overflow-hidden" style={{ minHeight: '300px', height: '60vh', maxHeight: '600px' }}>
+                        {isYouTubeVideo(selectedVideo.link) ? (
+                          <AdvancedVideoPlayer
+                            src={getYouTubeVideoId(selectedVideo.link)}
+                            type="youtube"
+                            title={selectedVideo.name}
+                            autoplay={false}
+                            onPlay={() => console.log('Video started playing')}
+                            onPause={() => console.log('Video paused')}
+                            onEnded={() => console.log('Video ended')}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-900 flex items-center justify-center text-white">
+                            <div className="text-center">
+                              <svg className="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              <p className="text-lg font-medium mb-2">Video Player</p>
+                              <p className="text-sm text-gray-300">
+                                {selectedVideo.link.includes('http') ? 'Direct video link detected' : 'Video source not supported'}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-2">
+                                Currently supporting YouTube videos only
+                              </p>
+                            </div>
                           </div>
-                          <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
-                            YouTube Preview
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center">
-                            <svg className="h-16 w-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p className="text-gray-600">Video preview</p>
-                            <p className="text-sm text-gray-500">Link: {selectedVideo.link}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
                     <div className="flex items-center justify-between text-sm text-gray-600">
                       <span>Duration: {formatDuration(selectedVideo.duration)}</span>
                       <span>Lesson {videos.findIndex(v => v.id === selectedVideo.id) + 1} of {videos.length}</span>

@@ -119,8 +119,8 @@ const AdminAddCourseWizard: React.FC = () => {
   };
 
   const removeVideo = (videoId: string) => {
-    setCourseData(prev => ({
-      ...prev,
+      setCourseData(prev => ({
+        ...prev,
       videos: prev.videos.filter(v => v.id !== videoId)
     }));
   };
@@ -277,20 +277,20 @@ const AdminAddCourseWizard: React.FC = () => {
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="Enter course title"
           />
-        </div>
+            </div>
 
-        <div>
+              <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Course Description
-          </label>
+                </label>
           <textarea
             value={courseData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
             rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="Describe what this course covers"
-          />
-        </div>
+                />
+              </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -318,8 +318,8 @@ const AdminAddCourseWizard: React.FC = () => {
       >
         Continue to Videos
       </button>
-    </div>
-  );
+      </div>
+    );
 
   const renderStep2 = () => (
     <div className="max-w-4xl mx-auto">
@@ -331,36 +331,36 @@ const AdminAddCourseWizard: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Video</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
+            <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Video Name *
-            </label>
-            <input
-              type="text"
+              </label>
+              <input
+                type="text"
               value={newVideo.name}
               onChange={(e) => handleVideoInputChange('name', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Introduction to React"
-            />
-          </div>
+              />
+            </div>
 
-          <div>
+            <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Duration *
-            </label>
+              </label>
             <input
               type="text"
               value={newVideo.duration}
               onChange={(e) => handleVideoInputChange('duration', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="15:30 or 15m 30s"
-            />
-          </div>
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
               Video Link *
-            </label>
+              </label>
             <input
               type="url"
               value={newVideo.link}
@@ -388,15 +388,15 @@ const AdminAddCourseWizard: React.FC = () => {
           <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
             {error}
           </div>
-        )}
-      </div>
+                      )}
+                    </div>
 
       {/* Video List */}
       {courseData.videos.length > 0 && (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Course Videos</h3>
-          </div>
+                    </div>
           
           <div className="divide-y divide-gray-200">
             {courseData.videos.map((video, index) => (
@@ -412,7 +412,7 @@ const AdminAddCourseWizard: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-semibold">
                     {index + 1}
-                  </div>
+                    </div>
                   <div>
                     <h4 className="font-medium text-gray-900">{video.name}</h4>
                     <p className="text-sm text-gray-500">{video.duration}</p>
@@ -464,8 +464,8 @@ const AdminAddCourseWizard: React.FC = () => {
         >
           Continue to Cover Photo
         </button>
-      </div>
-    </div>
+              </div>
+            </div>
   );
 
   const renderStep3 = () => (
@@ -532,13 +532,13 @@ const AdminAddCourseWizard: React.FC = () => {
         </button>
         
         <div className="space-x-4">
-          <button
-            onClick={handleCreateCourse}
-            disabled={loading}
+              <button
+                onClick={handleCreateCourse}
+                disabled={loading}
             className="px-8 py-3 bg-gradient-to-r from-green-600 to-blue-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            {loading ? 'Creating Course...' : 'Create Course'}
-          </button>
+              >
+                {loading ? 'Creating Course...' : 'Create Course'}
+              </button>
           
           <button
             onClick={handleCreateCourse}
@@ -588,7 +588,7 @@ const AdminAddCourseWizard: React.FC = () => {
                     }`}
                   />
                 )}
-              </div>
+            </div>
             ))}
           </div>
         </div>

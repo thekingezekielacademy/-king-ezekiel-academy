@@ -17,7 +17,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminAddCourseWizard from './pages/admin/AdminAddCourseWizard';
 import AdminCourses from './pages/admin/AdminCourses';
 import EditCourse from './pages/admin/EditCourse';
-import CourseView from './pages/admin/CourseView.tsx';
+import CourseView from './pages/admin/CourseView';
 import AddCourse from './pages/admin/AddCourse';
 import Profile from './pages/Profile';
 import CourseOverview from './pages/course/CourseOverview';

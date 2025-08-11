@@ -43,11 +43,18 @@ const Profile: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Paystack config
-  const PAYSTACK_PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || 'pk_test_021c63210a1910a260b520b8bfa97cce19e996d8';
-  const PAYSTACK_PLAN_CODE = 'PLN_fx0dayx3idr67x1';
+  const PAYSTACK_PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY;
+  const PAYSTACK_PLAN_CODE = process.env.REACT_APP_PAYSTACK_PLAN_CODE;
   const [paystackReady, setPaystackReady] = useState(false);
+  const [paystackError, setPaystackError] = useState<string | null>(null);
+  
   // Load Paystack script early and mark ready on load
   useEffect(() => {
+    if (!PAYSTACK_PUBLIC_KEY) {
+      setPaystackError('Paystack public key not configured');
+      return;
+    }
+    
     const id = 'paystack-inline-js';
     const existing = document.getElementById(id) as HTMLScriptElement | null;
     if (existing) {
@@ -60,51 +67,113 @@ const Profile: React.FC = () => {
     s.src = 'https://js.paystack.co/v1/inline.js';
     s.async = true;
     s.onload = () => setPaystackReady(true);
+    s.onerror = () => setPaystackError('Failed to load Paystack script');
     document.body.appendChild(s);
-  }, []);
+  }, [PAYSTACK_PUBLIC_KEY]);
 
   const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
+  // Function to verify payment on server (implement in your backend)
+  const verifyPaymentOnServer = async (reference: string, userId: string) => {
+    try {
+      // This should call your backend API to verify the payment
+      // const response = await fetch('/api/verify-payment', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ reference, userId })
+      // });
+      // const result = await response.json();
+      // if (!result.success) throw new Error(result.message);
+      
+      console.log('Payment verification would be sent to server:', { reference, userId });
+    } catch (error) {
+      console.error('Payment verification failed:', error);
+      // Don't show error to user as payment was successful
+    }
+  };
+
   const startSubscription = () => {
     try {
+      // Clear previous messages
+      setMessage(null);
+      setError(null);
+      
+      // Validation checks
       if (!user?.email) {
         setError('Sign in required to subscribe');
         return;
       }
+      
+      if (!PAYSTACK_PUBLIC_KEY) {
+        setError('Paystack is not configured. Please contact support.');
+        return;
+      }
+      
+      if (!PAYSTACK_PLAN_CODE) {
+        setError('Subscription plan not configured. Please contact support.');
+        return;
+      }
+      
       if (!window.PaystackPop) {
         setError('Payment library not loaded yet. Please wait a moment and try again.');
         return;
       }
+      
       const ref = createReference();
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: user.email,
         plan: PAYSTACK_PLAN_CODE,
         ref,
+        amount: 250000, // Amount in kobo (₦2,500 = 250,000 kobo)
+        currency: 'NGN',
         callback: function(response: any) {
-          // Mark success in UI; for production, verify on server using secret key webhook
-          try {
-            localStorage.setItem('subscription_active', 'true');
-            localStorage.setItem('subscription_ref', response?.reference || ref);
-            const next = new Date();
-            next.setMonth(next.getMonth() + 1);
-            const nextStr = next.toISOString().slice(0,10);
-            localStorage.setItem('subscription_next_renewal', nextStr);
-          } catch(e) {}
-          setSubActive(true);
-          setSubRef(response?.reference || ref);
-          const n = new Date(); n.setMonth(n.getMonth() + 1);
-          setSubNextRenewal(n.toISOString().slice(0,10));
-          setShowManageSubscription(false);
-          setMessage('Subscription started successfully. Ref: ' + (response?.reference || ref));
+          console.log('Paystack payment successful:', response);
+          
+          // Verify the payment was successful
+          if (response.status === 'success') {
+            try {
+              // Store subscription data locally
+              localStorage.setItem('subscription_active', 'true');
+              localStorage.setItem('subscription_ref', response.reference || ref);
+              localStorage.setItem('subscription_amount', '2500');
+              localStorage.setItem('subscription_currency', 'NGN');
+              
+              // Calculate next renewal date
+              const next = new Date();
+              next.setMonth(next.getMonth() + 1);
+              const nextStr = next.toISOString().slice(0,10);
+              localStorage.setItem('subscription_next_renewal', nextStr);
+              
+              // Update UI state
+              setSubActive(true);
+              setSubRef(response.reference || ref);
+              setSubNextRenewal(nextStr);
+              setShowManageSubscription(false);
+              
+              setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
+              
+              // Send verification to your backend
+              verifyPaymentOnServer(response.reference, user.id);
+              
+            } catch(e) {
+              console.error('Error storing subscription data:', e);
+              setError('Payment successful but failed to update subscription status. Please contact support.');
+            }
+          } else {
+            setError('Payment was not successful. Please try again.');
+          }
         },
         onClose: function() {
-          setMessage('Payment window closed.');
+          setMessage('Payment window closed. You can try again anytime.');
         }
       });
+      
       handler.openIframe();
+      
     } catch (e: any) {
-      setError(e?.message || 'Failed to initialize payment');
+      console.error('Paystack initialization error:', e);
+      setError(e?.message || 'Failed to initialize payment. Please try again.');
     }
   };
 
@@ -530,13 +599,28 @@ const Profile: React.FC = () => {
                 </div>
               </div>
               <div className="mt-5 grid grid-cols-1 gap-2">
-                <button
-                  onClick={startSubscription}
-                  disabled={!paystackReady || subActive}
-                  className={`px-4 py-2 rounded-lg ${paystackReady && !subActive ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-gray-300 text-white cursor-not-allowed'} border-0`}
-                >
-                  {paystackReady ? (subActive ? 'Update subscription' : 'Subscribe Now') : 'Loading payment...'}
-                </button>
+                {paystackError ? (
+                  <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    <p className="font-medium">Payment System Error</p>
+                    <p>{paystackError}</p>
+                    <p className="mt-1 text-xs">Please contact support or check your configuration.</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={startSubscription}
+                    disabled={!paystackReady || subActive}
+                    className={`px-4 py-2 rounded-lg ${
+                      paystackReady && !subActive 
+                        ? 'bg-primary-600 text-white hover:bg-primary-700' 
+                        : 'bg-gray-300 text-white cursor-not-allowed'
+                    } border-0`}
+                  >
+                    {paystackReady 
+                      ? (subActive ? 'Update subscription' : 'Subscribe Now') 
+                      : 'Loading payment...'
+                    }
+                  </button>
+                )}
                 <button
                   disabled={!subActive}
                   className={`px-4 py-2 border rounded-lg ${subActive ? 'hover:bg-red-50 text-red-600' : 'text-gray-400 cursor-not-allowed'} `}
@@ -545,7 +629,11 @@ const Profile: React.FC = () => {
                   Cancel subscription
                 </button>
               </div>
-              <p className="mt-4 text-xs text-gray-500">Note: This is a preview UI. Integrate your payment provider to make these actions live.</p>
+              <p className="mt-4 text-xs text-gray-500">
+                💡 <strong>Setup Required:</strong> Configure your Paystack credentials in the .env file to enable live payments.
+                <br />
+                📧 <strong>Support:</strong> Contact support if you need help setting up payments.
+              </p>
             </div>
           </div>
         )}

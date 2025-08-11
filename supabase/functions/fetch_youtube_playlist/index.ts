@@ -154,10 +154,10 @@ serve(async (req: Request) => {
       console.log("🔄 Falling back to test data due to YouTube API error");
       
       // Fallback to test data if YouTube API fails
-      const testData = {
-        items: [
-          {
-            videoId: "test123",
+    const testData = {
+      items: [
+        {
+          videoId: "test123",
             title: "Test Video - YouTube API Failed",
             description: `YouTube API error: ${youtubeError.message}`,
             thumbnailUrl: null,
@@ -172,16 +172,16 @@ serve(async (req: Request) => {
           videoCount: 1
         }
       };
-
-      return new Response(JSON.stringify(testData), {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-          "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-          "content-type": "application/json",
-        },
-        status: 200,
-      });
+    
+    return new Response(JSON.stringify(testData), {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+        "content-type": "application/json",
+      },
+      status: 200,
+    });
     }
 
   } catch (e) {

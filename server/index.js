@@ -12,6 +12,7 @@ const contactRoutes = require('./routes/contact');
 const newsletterRoutes = require('./routes/newsletter');
 const courseRoutes = require('./routes/courses');
 const lessonRoutes = require('./routes/lessons');
+const paymentRoutes = require('./routes/payments');
 
 // Load environment variables from parent directory
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -58,6 +59,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/lessons', lessonRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
