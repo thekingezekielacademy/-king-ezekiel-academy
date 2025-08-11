@@ -108,6 +108,24 @@ const CourseView: React.FC = () => {
     return duration;
   };
 
+  const getYouTubeEmbedUrl = (url: string): string => {
+    // Extract video ID from various YouTube URL formats
+    let videoId = '';
+    
+    if (url.includes('youtube.com/watch?v=')) {
+      videoId = url.split('v=')[1]?.split('&')[0] || '';
+    } else if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+    }
+    
+    if (videoId) {
+      // Return embed URL with minimal branding and no related videos
+      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0`;
+    }
+    
+    return url; // Fallback to original URL if parsing fails
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 pt-24">
@@ -214,25 +232,29 @@ const CourseView: React.FC = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">Lesson Player</h3>
+              <p className="text-sm text-gray-600 mb-4">Preview videos exactly as students will see them</p>
               {selectedVideo ? (
                 <div>
                   <h4 className="text-lg font-medium text-gray-900 mb-4">{selectedVideo.name}</h4>
-                  <div className="aspect-video bg-gray-100 rounded-lg mb-4 flex items-center justify-center">
+                  <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden">
                     {selectedVideo.link.includes('youtube.com') || selectedVideo.link.includes('youtu.be') ? (
-                      <div className="text-center">
-                        <svg className="h-16 w-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-gray-600">YouTube video preview</p>
-                        <p className="text-sm text-gray-500">Link: {selectedVideo.link}</p>
-                      </div>
+                      <iframe
+                        src={getYouTubeEmbedUrl(selectedVideo.link)}
+                        title={selectedVideo.name}
+                        className="w-full h-full"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
                     ) : (
-                      <div className="text-center">
-                        <svg className="h-16 w-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-gray-600">Video preview</p>
-                        <p className="text-sm text-gray-500">Link: {selectedVideo.link}</p>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="h-16 w-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="text-gray-600">Video preview</p>
+                          <p className="text-sm text-gray-500">Link: {selectedVideo.link}</p>
+                        </div>
                       </div>
                     )}
                   </div>
