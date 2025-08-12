@@ -29,7 +29,13 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset loading state when src changes
+  useEffect(() => {
+    setIsLoading(true);
+  }, [src]);
 
 
   useEffect(() => {
@@ -47,6 +53,14 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
       // Create a hidden iframe for the actual YouTube stream
       const iframe = document.createElement('iframe');
       iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&cc_load_policy=0&fs=0&disablekb=1&playsinline=1&enablejsapi=1&origin=${window.location.origin}`;
+      
+      // Set loading state when iframe starts loading
+      setIsLoading(true);
+      
+      // Listen for iframe load event
+      iframe.onload = () => {
+        setIsLoading(false);
+      };
       iframe.style.position = 'absolute';
       iframe.style.top = '0';
       iframe.style.left = '0';
@@ -335,7 +349,7 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
           {/* Mobile touch indicator */}
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40 md:hidden">
             <div className="w-16 h-16 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 transition-opacity duration-150 pointer-events-none"
-                 style={{ opacity: isPlaying ? (isHovered ? 1 : 0) : 1 }}>
+                 style={{ opacity: isLoading ? 1 : (isPlaying ? (isHovered ? 1 : 0) : 1) }}>
               <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
               </svg>
@@ -345,8 +359,8 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
           {/* Mobile touch hint */}
           <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-40 md:hidden">
             <div className="bg-black bg-opacity-70 text-white px-3 py-1 rounded-full text-xs opacity-0 transition-opacity duration-150 pointer-events-none"
-                 style={{ opacity: isPlaying ? (isHovered ? 1 : 0) : 1 }}>
-              Tap to show/hide controls
+                 style={{ opacity: isLoading ? 1 : (isPlaying ? (isHovered ? 1 : 0) : 1) }}>
+              {isLoading ? 'Loading...' : 'Tap to show/hide controls'}
             </div>
           </div>
           <style>
@@ -408,19 +422,21 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
           {/* Custom video placeholder */}
           <div 
             className={`absolute inset-0 w-full h-full bg-black flex items-center justify-center transition-all duration-75 cursor-pointer z-20 ${
-              isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100'
+              isLoading ? 'opacity-100' : (isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100')
             }`}
             onClick={togglePlay}
           >
             <div className="text-center text-white">
               <p className="text-xl md:text-2xl font-medium mb-2">{title || 'Video Player'}</p>
-              <p className="text-sm text-gray-400 opacity-75">Tap anywhere to play</p>
+              <p className="text-sm text-gray-400 opacity-75">
+                {isLoading ? 'Loading video...' : 'Tap anywhere to play'}
+              </p>
             </div>
           </div>
           
           {/* Custom controls overlay */}
           <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black to-transparent px-3 pb-0 pt-2 z-30 transition-opacity duration-75 ${
-            isPlaying ? (isHovered ? 'opacity-100' : 'opacity-0') : 'opacity-100'
+            isLoading ? 'opacity-100' : (isPlaying ? (isHovered ? 'opacity-100' : 'opacity-0') : 'opacity-100')
           }`}>
             {/* Progress bar */}
             <div className="mb-0">
@@ -444,7 +460,7 @@ const AdvancedVideoPlayer: React.FC<AdvancedVideoPlayerProps> = ({
                 <button 
                   onClick={togglePlay} 
                   className={`hover:text-blue-400 transition-colors transition-opacity p-1 md:p-0 ${
-                    isPlaying ? (isHovered ? 'opacity-100' : 'opacity-0') : 'opacity-100'
+                    isLoading ? 'opacity-100' : (isPlaying ? (isHovered ? 'opacity-100' : 'opacity-0') : 'opacity-100')
                   }`}
                 >
                   {isPlaying ? (
