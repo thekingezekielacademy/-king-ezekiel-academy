@@ -23,6 +23,7 @@ import Profile from './pages/Profile';
 import CourseOverview from './pages/course/CourseOverview';
 import LessonPlayer from './pages/course/LessonPlayer';
 import CourseComplete from './pages/course/CourseComplete';
+import Blog from './pages/Blog';
 import './App.css';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/courses" element={<Courses />} />
+              <Route path="/blog" element={<Blog />} />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/signin" element={<SignIn />} />
