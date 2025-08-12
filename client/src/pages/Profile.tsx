@@ -27,10 +27,32 @@ const Profile: React.FC = () => {
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [billingLoading, setBillingLoading] = useState(true);
   
-  // Legacy localStorage fallback (will be removed)
+  // Check subscription status from localStorage and update state
   const [subActive, setSubActive] = useState<boolean>(() => {
     try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
   });
+
+  // Update subActive when localStorage changes
+  useEffect(() => {
+    const checkLocalStorage = () => {
+      try {
+        const isActive = localStorage.getItem('subscription_active') === 'true';
+        console.log('🔄 localStorage check - subscription_active:', isActive);
+        setSubActive(isActive);
+      } catch {
+        console.log('❌ Error reading localStorage');
+        setSubActive(false);
+      }
+    };
+
+    // Check immediately
+    checkLocalStorage();
+
+    // Listen for storage changes
+    window.addEventListener('storage', checkLocalStorage);
+    
+    return () => window.removeEventListener('storage', checkLocalStorage);
+  }, []);
   // Removed unused state variables
 
   const [nameInput, setNameInput] = useState(user?.name || '');
@@ -84,8 +106,10 @@ const Profile: React.FC = () => {
         console.log('user_subscriptions table not available yet, using localStorage fallback');
         // Check localStorage for fallback data
         const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        console.log('localStorage subscription status:', localSubActive);
+        
         if (localSubActive) {
-          setSubscription({
+          const fallbackSubscription = {
             plan_name: 'Monthly Membership',
             status: 'active',
             amount: 250000,
@@ -93,11 +117,14 @@ const Profile: React.FC = () => {
             start_date: new Date().toISOString(),
             migration: 'localStorage fallback',
             next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
-          });
+          };
+          setSubscription(fallbackSubscription);
           setSubActive(true); // Update subscription status
+          console.log('✅ Set subscription active from localStorage fallback');
         } else {
           setSubscription(null);
           setSubActive(false); // Update subscription status
+          console.log('❌ No active subscription in localStorage');
         }
       }
       
@@ -120,16 +147,21 @@ const Profile: React.FC = () => {
         console.log('subscription_payments table not available yet, using localStorage fallback');
         // Check localStorage for fallback data
         const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        console.log('localStorage billing fallback, subscription active:', localSubActive);
+        
         if (localSubActive) {
-          setBillingHistory([{
+          const fallbackPayment = {
             id: 'local-1',
             amount: 250000,
             currency: 'NGN',
             status: 'success',
             created_at: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
-          }]);
+          };
+          setBillingHistory([fallbackPayment]);
+          console.log('✅ Set billing history from localStorage fallback');
         } else {
           setBillingHistory([]);
+          console.log('❌ No billing history in localStorage');
         }
       }
       
@@ -354,6 +386,13 @@ const Profile: React.FC = () => {
     setNameInput(user?.name || '');
     setBioInput(user?.bio || '');
   }, [user?.name, user?.bio]);
+
+  // Fetch subscription data when component mounts
+  useEffect(() => {
+    if (user?.id) {
+      fetchSubscriptionData();
+    }
+  }, [user?.id, fetchSubscriptionData]);
 
   const handleAvatarUpload = async (file: File) => {
     if (!user) return;
@@ -606,7 +645,10 @@ const Profile: React.FC = () => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                 <span className="ml-2 text-gray-600">Loading...</span>
               </div>
-            ) : (subscription || subActive) ? (
+            ) : (() => {
+              console.log('🔍 Profile render - subscription:', subscription, 'subActive:', subActive);
+              return (subscription || subActive);
+            })() ? (
               <div className="space-y-2 text-sm text-gray-700">
                 <div className="flex items-center justify-between">
                   <span>Plan</span>
