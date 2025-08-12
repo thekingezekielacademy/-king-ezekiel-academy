@@ -20,6 +20,7 @@ interface Course {
   rating: number;
   students: number;
   cover_photo: string;
+  lessons: number;
 }
 
 const Courses: React.FC = () => {
@@ -68,7 +69,15 @@ const Courses: React.FC = () => {
       
       let query = supabase
         .from('courses')
-        .select('*');
+        .select(`
+          *,
+          course_videos (
+            id,
+            name,
+            duration,
+            order_index
+          )
+        `);
 
       // Apply sorting based on selected option
       if (selectedSort === 'latest') {
@@ -114,7 +123,15 @@ const Courses: React.FC = () => {
           // Retry the courses fetch after refresh
           let retryQuery = supabase
             .from('courses')
-            .select('*');
+            .select(`
+              *,
+              course_videos (
+                id,
+                name,
+                duration,
+                order_index
+              )
+            `);
 
           // Apply sorting based on selected option
           if (selectedSort === 'latest') {
@@ -143,16 +160,17 @@ const Courses: React.FC = () => {
           
           if (retryData) {
             console.log(`✅ Courses data received after refresh for page ${page}:`, retryData);
-            const transformedCourses = retryData.map(course => ({
-              ...course,
-              // Add default values for missing fields
-              category: 'general', // Default category since it doesn't exist in DB
-              duration: '2 hours', // Default duration since it doesn't exist in DB
-              instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
-              rating: 4.5, // Default rating since it doesn't exist in DB
-              students: 0, // Default students since it doesn't exist in DB
-              cover_photo: course.cover_photo_url || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=250&fit=crop'
-            }));
+                              const transformedCourses = retryData.map(course => ({
+                    ...course,
+                    // Add real data from videos
+                    category: 'general', // Default category since it doesn't exist in DB
+                    duration: calculateTotalDuration(course.course_videos || []),
+                    instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
+                    rating: 4.5, // Default rating since it doesn't exist in DB
+                    students: 0, // Default students since it doesn't exist in DB
+                    cover_photo: course.cover_photo_url || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=250&fit=crop',
+                    lessons: course.course_videos?.length || 0
+                  }));
             
             if (append) {
               setCourses(prev => [...prev, ...transformedCourses]);
@@ -179,17 +197,18 @@ const Courses: React.FC = () => {
       
       if (data) {
         console.log(`✅ Courses data received for page ${page}:`, data);
-        // Transform data to match our interface
-        const transformedCourses = data.map(course => ({
-          ...course,
-          // Add default values for missing fields
-          category: 'general', // Default category since it doesn't exist in DB
-          duration: '2 hours', // Default duration since it doesn't exist in DB
-          instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
-          rating: 4.5, // Default rating since it doesn't exist in DB
-          students: 0, // Default students since it doesn't exist in DB
-          cover_photo: course.cover_photo_url || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=250&fit=crop'
-        }));
+                          // Transform data to match our interface
+                  const transformedCourses = data.map(course => ({
+                    ...course,
+                    // Add real data from videos
+                    category: 'general', // Default category since it doesn't exist in DB
+                    duration: calculateTotalDuration(course.course_videos || []),
+                    instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
+                    rating: 4.5, // Default rating since it doesn't exist in DB
+                    students: 0, // Default students since it doesn't exist in DB
+                    cover_photo: course.cover_photo_url || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=250&fit=crop',
+                    lessons: course.course_videos?.length || 0
+                  }));
         
         if (append) {
           setCourses(prev => [...prev, ...transformedCourses]);
@@ -225,6 +244,59 @@ const Courses: React.FC = () => {
   const loadMoreCourses = () => {
     if (hasMore && !loadingMore) {
       fetchCourses(currentPage + 1, true);
+    }
+  };
+
+  // Helper function to calculate total duration from videos
+  const calculateTotalDuration = (videos: any[]): string => {
+    if (!videos || videos.length === 0) return '0 min';
+    
+    let totalMinutes = 0;
+    let totalSeconds = 0;
+    
+    videos.forEach(video => {
+      const duration = video.duration;
+      if (duration) {
+        // Handle different duration formats: "5:30", "5 min", "5m 30s", etc.
+        if (duration.includes(':')) {
+          const parts = duration.split(':');
+          if (parts.length === 2) {
+            totalMinutes += parseInt(parts[0]) || 0;
+            totalSeconds += parseInt(parts[1]) || 0;
+          } else if (parts.length === 3) {
+            totalMinutes += parseInt(parts[0]) || 0;
+            totalMinutes += (parseInt(parts[1]) || 0) * 60;
+            totalSeconds += parseInt(parts[2]) || 0;
+          }
+        } else if (duration.includes('min') || duration.includes('m')) {
+          const match = duration.match(/(\d+)/);
+          if (match) totalMinutes += parseInt(match[1]) || 0;
+        } else if (duration.includes('h') || duration.includes('hour')) {
+          const match = duration.match(/(\d+)/);
+          if (match) totalMinutes += (parseInt(match[1]) || 0) * 60;
+        } else {
+          // Try to parse as just a number (assume minutes)
+          const num = parseInt(duration);
+          if (!isNaN(num)) totalMinutes += num;
+        }
+      }
+    });
+    
+    // Convert seconds to minutes
+    totalMinutes += Math.floor(totalSeconds / 60);
+    totalSeconds = totalSeconds % 60;
+    
+    // Format the result
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      if (mins === 0) {
+        return `${hours}h`;
+      } else {
+        return `${hours}h ${mins}m`;
+      }
+    } else {
+      return `${totalMinutes}m`;
     }
   };
 
@@ -336,8 +408,8 @@ const Courses: React.FC = () => {
 
   const handleEnroll = (courseId: string) => {
     if (user && localStorage.getItem('subscription_active') === 'true') {
-      // User is signed in and has active subscription - go to course
-      navigate(`/course/${courseId}`);
+      // User is signed in and has active subscription - go to course overview
+      navigate(`/course/${courseId}/overview`);
     } else if (user) {
       // User is signed in but no active subscription - go to profile to upgrade
       navigate('/profile');
@@ -564,6 +636,10 @@ const Courses: React.FC = () => {
                   <div className="flex items-center space-x-1">
                     <FaClock className="h-4 w-4" />
                     <span>{course.duration}</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <FaBook className="h-4 w-4" />
+                    <span>{course.lessons} {course.lessons === 1 ? 'lesson' : 'lessons'}</span>
                   </div>
                   <div className="flex items-center space-x-1">
                     <FaUser className="h-4 w-4" />

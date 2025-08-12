@@ -49,6 +49,7 @@ function App() {
               <Route path="/admin/add-course" element={<AdminRoute><AddCourse /></AdminRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/course/:id" element={<ProtectedRoute><CourseOverview /></ProtectedRoute>} />
+              <Route path="/course/:id/overview" element={<ProtectedRoute><CourseOverview /></ProtectedRoute>} />
               <Route path="/course/:id/lesson/:lessonId" element={<ProtectedRoute><LessonPlayer /></ProtectedRoute>} />
               <Route path="/course/:id/complete" element={<ProtectedRoute><CourseComplete /></ProtectedRoute>} />
             </Routes>
