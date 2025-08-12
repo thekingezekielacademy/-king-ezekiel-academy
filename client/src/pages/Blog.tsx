@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FaSearch, FaClock, FaUser, FaEye, FaTag, FaFolder } from 'react-icons/fa';
 
 interface BlogPost {
@@ -15,6 +16,7 @@ interface BlogPost {
 }
 
 const Blog: React.FC = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
@@ -265,7 +267,10 @@ const Blog: React.FC = () => {
                 </div>
 
                 {/* Read More Button */}
-                <button className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                <button 
+                  onClick={() => navigate(`/blog/${post.id}`)}
+                  className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
                   Read Article
                 </button>
               </div>

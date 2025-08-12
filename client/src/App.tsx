@@ -24,6 +24,7 @@ import CourseOverview from './pages/course/CourseOverview';
 import LessonPlayer from './pages/course/LessonPlayer';
 import CourseComplete from './pages/course/CourseComplete';
 import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import './App.css';
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/courses" element={<Courses />} />
               <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/signin" element={<SignIn />} />
