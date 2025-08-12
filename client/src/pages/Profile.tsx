@@ -57,6 +57,93 @@ const Profile: React.FC = () => {
   
 
   
+  // Fetch real subscription data from database
+  const fetchSubscriptionData = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setSubscriptionLoading(true);
+      setBillingLoading(true);
+      
+      // Fetch active subscription
+      try {
+        const { data: subData, error: subError } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (!subError && subData) {
+          setSubscription(subData);
+          console.log('✅ Found active subscription:', subData);
+        } else {
+          console.log('No active subscription found');
+          setSubscription(null);
+        }
+      } catch (tableError) {
+        console.log('user_subscriptions table not available yet, using localStorage fallback');
+        // Check localStorage for fallback data
+        const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        if (localSubActive) {
+          setSubscription({
+            plan_name: 'Monthly Membership',
+            status: 'active',
+            amount: 250000,
+            currency: 'NGN',
+            start_date: new Date().toISOString(),
+            migration: 'localStorage fallback',
+            next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+          });
+        } else {
+          setSubscription(null);
+        }
+      }
+      
+      // Fetch billing history
+      try {
+        const { data: billingData, error: billingError } = await supabase
+          .from('subscription_payments')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (!billingError && billingData) {
+          setBillingHistory(billingData);
+          console.log('✅ Found billing history:', billingData);
+        } else {
+          console.log('No billing history found');
+          setBillingHistory([]);
+        }
+      } catch (tableError) {
+        console.log('subscription_payments table not available yet, using localStorage fallback');
+        // Check localStorage for fallback data
+        const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        if (localSubActive) {
+          setBillingHistory([{
+            id: 'local-1',
+            amount: 250000,
+            currency: 'NGN',
+            status: 'success',
+            created_at: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+          }]);
+        } else {
+          setBillingHistory([]);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error fetching subscription data:', error);
+      setSubscription(null);
+      setBillingHistory([]);
+    } finally {
+      setSubscriptionLoading(false);
+      setBillingLoading(false);
+    }
+  }, [user?.id]);
+
   // Load Paystack script early and mark ready on load
   useEffect(() => {
     if (!PAYSTACK_PUBLIC_KEY) {
@@ -86,8 +173,6 @@ const Profile: React.FC = () => {
       fetchSubscriptionData();
     }
   }, [user?.id, fetchSubscriptionData]);
-
-  // Fetch real subscription data from database
   const fetchSubscriptionData = useCallback(async () => {
     if (!user?.id) return;
     
