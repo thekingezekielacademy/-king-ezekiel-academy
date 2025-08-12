@@ -1,21 +1,103 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ProgressRing from '../../components/ProgressRing';
 import AdvancedVideoPlayer from '../../components/AdvancedVideoPlayer';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const LessonPlayer: React.FC = () => {
   const navigate = useNavigate();
   const { id, lessonId } = useParams();
+  const { user } = useAuth();
 
-  const current = Number(lessonId) || 1;
-  
-  // Sample video data for demonstration
-  const [currentVideo] = useState({
-    id: lessonId,
-    name: `Lesson ${lessonId} - Advanced Concepts`,
-    link: 'https://youtu.be/hd8LZ8hJtVs?si=e8NvHi5mjf7yehnh', // Sample YouTube video
-    duration: '37:51'
-  });
+  const [course, setCourse] = useState<any>(null);
+  const [currentVideo, setCurrentVideo] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
+
+  // Fetch course and lesson data
+  useEffect(() => {
+    const fetchCourseAndLesson = async () => {
+      if (!id || !lessonId) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // First, refresh the session to ensure we have a valid token
+        const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+        
+        if (sessionError) {
+          console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
+          const { data: currentSession } = await supabase.auth.getSession();
+          if (!currentSession.session) {
+            setError('Authentication required. Please sign in again.');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Fetch course with all videos
+        const { data: courseData, error: courseError } = await supabase
+          .from('courses')
+          .select(`
+            *,
+            course_videos (
+              id,
+              name,
+              duration,
+              link,
+              order_index
+            )
+          `)
+          .eq('id', id)
+          .single();
+        
+        if (courseError) {
+          console.error('❌ Error fetching course:', courseError);
+          throw courseError;
+        }
+        
+        if (courseData) {
+          console.log('✅ Course data received:', courseData);
+          setCourse(courseData);
+          
+          // Find the current lesson by lessonId
+          const videos = courseData.course_videos || [];
+          const sortedVideos = videos.sort((a: any, b: any) => a.order_index - b.order_index);
+          
+          // Try to find lesson by ID first, then by order index
+          let foundVideo = videos.find((v: any) => v.id === lessonId);
+          if (!foundVideo) {
+            // If lessonId is a number, treat it as order index
+            const lessonIndex = parseInt(lessonId) - 1;
+            foundVideo = sortedVideos[lessonIndex];
+          }
+          
+          if (foundVideo) {
+            setCurrentVideo(foundVideo);
+            setCurrentLessonIndex(sortedVideos.findIndex((v: any) => v.id === foundVideo.id));
+          } else {
+            // Default to first video if lesson not found
+            if (sortedVideos.length > 0) {
+              setCurrentVideo(sortedVideos[0]);
+              setCurrentLessonIndex(0);
+            }
+          }
+        } else {
+          setError('Course not found');
+        }
+      } catch (err) {
+        console.error('❌ Error fetching course:', err);
+        setError(`Failed to load course: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourseAndLesson();
+  }, [id, lessonId]);
 
   // Handle video player events
   const handleVideoPlay = () => {
@@ -34,14 +116,16 @@ const LessonPlayer: React.FC = () => {
   };
 
   const nextLesson = () => {
-    const next = current + 1;
-    navigate(`/course/${id}/lesson/${next}`);
+    if (course?.course_videos && currentLessonIndex < course.course_videos.length - 1) {
+      const nextVideo = course.course_videos[currentLessonIndex + 1];
+      navigate(`/course/${id}/lesson/${nextVideo.id}`);
+    }
   };
 
   const prevLesson = () => {
-    if (current > 1) {
-      const prev = current - 1;
-      navigate(`/course/${id}/lesson/${prev}`);
+    if (course?.course_videos && currentLessonIndex > 0) {
+      const prevVideo = course.course_videos[currentLessonIndex - 1];
+      navigate(`/course/${id}/lesson/${prevVideo.id}`);
     }
   };
 
@@ -56,6 +140,66 @@ const LessonPlayer: React.FC = () => {
   const isYouTubeVideo = (url: string) => {
     return url.includes('youtube.com') || url.includes('youtu.be');
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <p className="mt-2 text-gray-600">Loading lesson...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <p className="text-red-700 font-medium mb-3">{error}</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+              <button 
+                onClick={() => navigate('/courses')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Back to Courses
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No course or video data
+  if (!course || !currentVideo) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <p className="text-yellow-700 font-medium mb-3">Lesson not found</p>
+            <button 
+              onClick={() => navigate('/courses')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Back to Courses
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-16">
@@ -77,8 +221,14 @@ const LessonPlayer: React.FC = () => {
         <aside className="hidden md:block md:col-span-3 bg-white border rounded-xl h-fit p-4">
           <div className="font-bold mb-3">Lessons</div>
           <div className="space-y-2">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className={`px-3 py-2 rounded border ${Number(lessonId) === i + 1 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}>Lesson {i + 1}</div>
+            {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => (
+              <div 
+                key={video.id} 
+                className={`px-3 py-2 rounded border cursor-pointer ${currentVideo.id === video.id ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}
+                onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
+              >
+                {video.name || `Lesson ${index + 1}`}
+              </div>
             ))}
           </div>
         </aside>
@@ -126,12 +276,16 @@ const LessonPlayer: React.FC = () => {
               <div className="flex items-center justify-between">
                 <button
                   onClick={prevLesson}
-                  disabled={current <= 1}
-                  className={`px-4 py-2 rounded-lg border ${current <= 1 ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}
+                  disabled={!course?.course_videos || currentLessonIndex <= 0}
+                  className={`px-4 py-2 rounded-lg border ${!course?.course_videos || currentLessonIndex <= 0 ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50'}`}
                 >
                   Previous Lesson
                 </button>
-                <button onClick={nextLesson} className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">
+                <button 
+                  onClick={nextLesson} 
+                  disabled={!course?.course_videos || currentLessonIndex >= (course.course_videos?.length || 0) - 1}
+                  className={`px-4 py-2 rounded-lg border ${!course?.course_videos || currentLessonIndex >= (course.course_videos?.length || 0) - 1 ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                >
                   Next Lesson
                 </button>
               </div>
@@ -143,13 +297,13 @@ const LessonPlayer: React.FC = () => {
             <div className="bg-white border rounded-xl p-4">
               <div className="font-bold mb-3">Lessons</div>
               <div className="space-y-2">
-                {Array.from({ length: 12 }).map((_, i) => (
+                {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => (
                   <div
-                    key={i}
-                    className={`px-3 py-2 rounded border ${current === i + 1 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}
-                    onClick={() => navigate(`/course/${id}/lesson/${i + 1}`)}
+                    key={video.id}
+                    className={`px-3 py-2 rounded border cursor-pointer ${currentVideo.id === video.id ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}
+                    onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
                   >
-                    Lesson {i + 1}
+                    {video.name || `Lesson ${index + 1}`}
                   </div>
                 ))}
               </div>
@@ -161,7 +315,12 @@ const LessonPlayer: React.FC = () => {
         <aside className="col-span-12 md:col-span-3 space-y-4">
           <div className="bg-white border rounded-xl p-4">
             <div className="font-semibold mb-1">Up Next</div>
-            <div className="text-sm text-gray-600">Lesson {Number(lessonId) + 1} preview</div>
+            <div className="text-sm text-gray-600">
+              {course.course_videos && currentLessonIndex < course.course_videos.length - 1 
+                ? course.course_videos[currentLessonIndex + 1]?.name || `Lesson ${currentLessonIndex + 2}`
+                : 'This is the last lesson'
+              }
+            </div>
           </div>
           <div className="bg-white border rounded-xl p-4">
             <div className="font-semibold mb-1">Daily Streak</div>
