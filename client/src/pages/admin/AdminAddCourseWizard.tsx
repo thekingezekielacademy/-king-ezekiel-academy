@@ -441,9 +441,9 @@ const AdminAddCourseWizard: React.FC = () => {
                   >
                     Remove
                   </button>
-                </div>
-              </div>
-            ))}
+                    </div>
+                  </div>
+                ))}
           </div>
         </div>
       )}
