@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { FaEdit, FaEnvelope, FaUser, FaImage, FaKey, FaSave, FaTimes, FaCreditCard, FaHistory } from 'react-icons/fa';
@@ -85,10 +85,10 @@ const Profile: React.FC = () => {
     if (user?.id) {
       fetchSubscriptionData();
     }
-  }, [user?.id]);
+  }, [user?.id, fetchSubscriptionData]);
 
   // Fetch real subscription data from database
-  const fetchSubscriptionData = async () => {
+  const fetchSubscriptionData = useCallback(async () => {
     if (!user?.id) return;
     
     try {
@@ -96,36 +96,71 @@ const Profile: React.FC = () => {
       setBillingLoading(true);
       
       // Fetch active subscription
-      const { data: subData, error: subError } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (!subError && subData) {
-        setSubscription(subData);
-        console.log('✅ Found active subscription:', subData);
-      } else {
-        console.log('No active subscription found');
-        setSubscription(null);
+      try {
+        const { data: subData, error: subError } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (!subError && subData) {
+          setSubscription(subData);
+          console.log('✅ Found active subscription:', subData);
+        } else {
+          console.log('No active subscription found');
+          setSubscription(null);
+        }
+      } catch (tableError) {
+        console.log('user_subscriptions table not available yet, using localStorage fallback');
+        // Check localStorage for fallback data
+        const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        if (localSubActive) {
+          setSubscription({
+            plan_name: 'Monthly Membership',
+            status: 'active',
+            amount: 250000,
+            currency: 'NGN',
+            start_date: new Date().toISOString(),
+            next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+          });
+        } else {
+          setSubscription(null);
+        }
       }
       
       // Fetch billing history
-      const { data: billingData, error: billingError } = await supabase
-        .from('subscription_payments')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
-      if (!billingError && billingData) {
-        setBillingHistory(billingData);
-        console.log('✅ Found billing history:', billingData);
-      } else {
-        console.log('No billing history found');
-        setBillingHistory([]);
+      try {
+        const { data: billingData, error: billingError } = await supabase
+          .from('subscription_payments')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (!billingError && billingData) {
+          setBillingHistory(billingData);
+          console.log('✅ Found billing history:', billingData);
+        } else {
+          console.log('No billing history found');
+          setBillingHistory([]);
+        }
+      } catch (tableError) {
+        console.log('subscription_payments table not available yet, using localStorage fallback');
+        // Check localStorage for fallback data
+        const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        if (localSubActive) {
+          setBillingHistory([{
+            id: 'local-1',
+            amount: 250000,
+            currency: 'NGN',
+            status: 'success',
+            created_at: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+          }]);
+        } else {
+          setBillingHistory([]);
+        }
       }
       
     } catch (error) {
@@ -136,7 +171,7 @@ const Profile: React.FC = () => {
       setSubscriptionLoading(false);
       setBillingLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
@@ -198,7 +233,7 @@ const Profile: React.FC = () => {
         ref,
         amount: 250000, // Amount in kobo (₦2,500 = 250,000 kobo)
         currency: 'NGN',
-        callback: async function(response: any) {
+                callback: function(response: any) {
           console.log('Paystack payment successful:', response);
           
           // Verify the payment was successful
@@ -224,56 +259,59 @@ const Profile: React.FC = () => {
               
               setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
               
-              // Save to database
+              // Save to database (non-blocking)
               if (user?.id) {
-                try {
-                  // Save subscription record
-                  const { error: subError } = await supabase
-                    .from('user_subscriptions')
-                    .insert({
-                      user_id: user.id,
-                      paystack_subscription_id: response.reference || ref,
-                      paystack_customer_code: user.email,
-                      plan_name: 'Monthly Membership',
-                      status: 'active',
-                      amount: 250000, // ₦2,500 in kobo
-                      currency: 'NGN',
-                      start_date: new Date().toISOString(),
-                      next_payment_date: next.toISOString(),
-                    });
-                  
-                  if (subError) {
-                    console.error('Error saving subscription:', subError);
-                  } else {
-                    console.log('✅ Subscription saved to database');
+                // Use setTimeout to avoid blocking the callback
+                setTimeout(async () => {
+                  try {
+                    // Save subscription record
+                    const { error: subError } = await supabase
+                      .from('user_subscriptions')
+                      .insert({
+                        user_id: user.id,
+                        paystack_subscription_id: response.reference || ref,
+                        paystack_customer_code: user.email,
+                        plan_name: 'Monthly Membership',
+                        status: 'active',
+                        amount: 250000, // ₦2,500 in kobo
+                        currency: 'NGN',
+                        start_date: new Date().toISOString(),
+                        next_payment_date: next.toISOString(),
+                      });
+                    
+                    if (subError) {
+                      console.error('Error saving subscription:', subError);
+                    } else {
+                      console.log('✅ Subscription saved to database');
+                    }
+                    
+                    // Save payment record
+                    const { error: paymentError } = await supabase
+                      .from('subscription_payments')
+                      .insert({
+                        user_id: user.id,
+                        paystack_transaction_id: response.reference || ref,
+                        paystack_reference: response.reference || ref,
+                        amount: 250000, // ₦2,500 in kobo
+                        currency: 'NGN',
+                        status: 'success',
+                        payment_method: 'card',
+                        paid_at: new Date().toISOString(),
+                      });
+                    
+                    if (paymentError) {
+                      console.error('Error saving payment:', paymentError);
+                    } else {
+                      console.log('✅ Payment saved to database');
+                    }
+                    
+                    // Refresh subscription data
+                    fetchSubscriptionData();
+                    
+                  } catch (error) {
+                    console.error('Error saving to database:', error);
                   }
-                  
-                  // Save payment record
-                  const { error: paymentError } = await supabase
-                    .from('subscription_payments')
-                    .insert({
-                      user_id: user.id,
-                      paystack_transaction_id: response.reference || ref,
-                      paystack_reference: response.reference || ref,
-                      amount: 250000, // ₦2,500 in kobo
-                      currency: 'NGN',
-                      status: 'success',
-                      payment_method: 'card',
-                      paid_at: new Date().toISOString(),
-                    });
-                  
-                  if (paymentError) {
-                    console.error('Error saving payment:', paymentError);
-                  } else {
-                    console.log('✅ Payment saved to database');
-                  }
-                  
-                  // Refresh subscription data
-                  fetchSubscriptionData();
-                  
-                } catch (error) {
-                  console.error('Error saving to database:', error);
-                }
+                }, 100);
               }
               
               // Send verification to your backend
