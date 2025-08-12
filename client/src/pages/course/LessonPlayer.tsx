@@ -129,16 +129,29 @@ const LessonPlayer: React.FC = () => {
     }
   };
 
-  // Helper function to extract YouTube video ID
-  const getYouTubeVideoId = (url: string) => {
+  // Helper function to extract YouTube video ID from URL
+  const getYouTubeVideoId = (url: string): string => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+    return match && match[2].length === 11 ? match[2] : url;
+  };
+
+  const formatDuration = (duration: string) => {
+    if (duration.includes(':')) {
+      return duration;
+    } else if (duration.includes('m') && duration.includes('s')) {
+      return duration;
+    } else if (duration.startsWith('PT')) {
+      const minutes = duration.match(/(\d+)M/)?.[1] || '0';
+      const seconds = duration.match(/(\d+)S/)?.[1] || '0';
+      return `${minutes}:${seconds.padStart(2, '0')}`;
+    }
+    return duration;
   };
 
   // Check if video is YouTube
-  const isYouTubeVideo = (url: string) => {
-    return url.includes('youtube.com') || url.includes('youtu.be');
+  const isYouTubeVideo = (url: string): boolean => {
+    return url.includes('youtube.com') || url.includes('youtu.be') || url.includes('youtube-nocookie.com');
   };
 
   // Loading state
@@ -247,10 +260,10 @@ const LessonPlayer: React.FC = () => {
                 <ProgressRing size={52} strokeWidth={6} progress={20} />
               </div>
             </div>
-            <div className="w-full overflow-hidden" style={{ minHeight: '400px', height: '60vh', maxHeight: '600px' }}>
+            <div className="w-full overflow-hidden" style={{ minHeight: '280px', height: '55vh', maxHeight: '580px', margin: 0, padding: 0, marginBottom: 0 }}>
               {isYouTubeVideo(currentVideo.link) ? (
                 <AdvancedVideoPlayer
-                  src={getYouTubeVideoId(currentVideo.link) || ''}
+                  src={getYouTubeVideoId(currentVideo.link)}
                   type="youtube"
                   title={currentVideo.name}
                   autoplay={false}
@@ -265,10 +278,19 @@ const LessonPlayer: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                     <p className="text-lg font-medium mb-2">Video Player</p>
-                    <p className="text-sm text-gray-300">Video source not supported</p>
+                    <p className="text-sm text-gray-300">
+                      {currentVideo.link.includes('http') ? 'Direct video link detected' : 'Video source not supported'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Currently supporting YouTube videos only
+                    </p>
                   </div>
                 </div>
               )}
+            </div>
+            <div className="flex items-center justify-between text-sm text-gray-600 px-4 -mt-2">
+              <span>Duration: {formatDuration(currentVideo.duration)}</span>
+              <span>Lesson {currentLessonIndex + 1} of {course.course_videos?.length || 0}</span>
             </div>
             <div className="p-4 space-y-4">
               <div className="text-sm text-gray-700">Downloadable resources • Transcript • Notes</div>
