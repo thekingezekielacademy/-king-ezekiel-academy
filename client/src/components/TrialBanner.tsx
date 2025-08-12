@@ -1,121 +1,71 @@
 import React from 'react';
-import { FaClock, FaExclamationTriangle, FaCrown } from 'react-icons/fa';
-import { TrialManager, TrialStatus } from '../utils/trialManager';
+import { FaExclamationTriangle, FaClock, FaCrown } from 'react-icons/fa';
+import { TrialStatus } from '../utils/trialManager';
 
 interface TrialBannerProps {
-  user: any;
+  trialStatus: TrialStatus;
   onSubscribe: () => void;
 }
 
-const TrialBanner: React.FC<TrialBannerProps> = ({ user, onSubscribe }) => {
-  const trialStatus = TrialManager.checkTrialStatus(user);
-  const progress = TrialManager.getTrialProgress(user);
-  const warning = TrialManager.getExpirationWarning(user);
-
-  if (!trialStatus.isActive && !warning) {
-    return null; // Don't show banner if no trial and no warning
+const TrialBanner: React.FC<TrialBannerProps> = ({ trialStatus, onSubscribe }) => {
+  if (!trialStatus.isActive || trialStatus.isExpired) {
+    return null;
   }
 
+  const getBannerStyle = () => {
+    if (trialStatus.daysRemaining === 0) {
+      return 'bg-red-500 text-white';
+    } else if (trialStatus.daysRemaining <= 2) {
+      return 'bg-orange-500 text-white';
+    } else {
+      return 'bg-blue-500 text-white';
+    }
+  };
+
+  const getIcon = () => {
+    if (trialStatus.daysRemaining === 0) {
+      return <FaExclamationTriangle className="text-red-200" />;
+    } else if (trialStatus.daysRemaining <= 2) {
+      return <FaClock className="text-orange-200" />;
+    } else {
+      return <FaCrown className="text-blue-200" />;
+    }
+  };
+
+  const getMessage = () => {
+    if (trialStatus.daysRemaining === 0) {
+      return 'Your free trial expires today! Subscribe now to keep learning.';
+    } else if (trialStatus.daysRemaining === 1) {
+      return 'Your free trial expires tomorrow! Subscribe now to keep learning.';
+    } else if (trialStatus.daysRemaining <= 3) {
+      return `Your free trial expires in ${trialStatus.daysRemaining} days. Subscribe now to keep learning!`;
+    } else {
+      return `You have ${trialStatus.daysRemaining} days left in your free trial.`;
+    }
+  };
+
   return (
-    <div className="w-full">
-      {/* Trial Status Banner */}
-      {trialStatus.isActive && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-100 border border-blue-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <FaClock className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-blue-900">
-                  🎉 7-Day Free Trial Active
-                </h3>
-                <p className="text-sm text-blue-700">
-                  {trialStatus.message}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onSubscribe}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              Subscribe Now
-            </button>
-          </div>
-          
-          {/* Trial Progress Bar */}
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-blue-600 mb-1">
-              <span>Trial Progress</span>
-              <span>{progress}%</span>
-            </div>
-            <div className="w-full bg-blue-200 rounded-full h-2">
-              <div 
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-blue-600 mt-1">
-              <span>Started: {new Date(trialStatus.trialStartDate).toLocaleDateString()}</span>
-              <span>Expires: {new Date(trialStatus.trialEndDate).toLocaleDateString()}</span>
-            </div>
+    <div className={`${getBannerStyle()} p-4 rounded-lg shadow-lg mb-6`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          {getIcon()}
+          <div>
+            <p className="font-semibold text-lg">{getMessage()}</p>
+            <p className="text-sm opacity-90">
+              {trialStatus.daysRemaining > 0 
+                ? `Trial ends: ${new Date(trialStatus.endDate).toLocaleDateString()}`
+                : 'Trial ended today'
+              }
+            </p>
           </div>
         </div>
-      )}
-
-      {/* Trial Expiration Warning */}
-      {warning && (
-        <div className="bg-gradient-to-r from-orange-50 to-red-100 border border-orange-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                <FaExclamationTriangle className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-orange-900">
-                  ⚠️ Trial Expiring Soon
-                </h3>
-                <p className="text-sm text-orange-700">
-                  {warning}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onSubscribe}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
-            >
-              Subscribe Now
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Trial Expired Message */}
-      {!trialStatus.canAccessCourses && !trialStatus.isActive && (
-        <div className="bg-gradient-to-r from-red-50 to-pink-100 border border-red-200 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <FaCrown className="h-5 w-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-red-900">
-                  🔒 Trial Expired
-                </h3>
-                <p className="text-sm text-red-700">
-                  Your 7-day free trial has ended. Subscribe to continue learning!
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onSubscribe}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-            >
-              Subscribe Now
-            </button>
-          </div>
-        </div>
-      )}
+        <button
+          onClick={onSubscribe}
+          className="px-6 py-2 bg-white text-blue-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+        >
+          Subscribe Now
+        </button>
+      </div>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { FaSearch, FaClock, FaUser, FaBook, FaTag, FaLock, FaUnlock, FaGraduatio
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import TrialManager from '../utils/trialManager';
 
 interface Course {
   id: string;
@@ -35,9 +36,87 @@ const Courses: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasTrialAccess, setHasTrialAccess] = useState(false);
   const COURSES_PER_PAGE = 10;
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Check if user has trial access
+  const checkTrialAccess = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // First check localStorage for trial status
+      const localTrial = localStorage.getItem('user_trial_status');
+      
+      if (localTrial) {
+        try {
+          const parsedTrial = JSON.parse(localTrial);
+                  // Recalculate days remaining - use floor to get exact days, not rounded up
+        const now = new Date();
+        const endDate = new Date(parsedTrial.endDate);
+        const timeDiff = endDate.getTime() - now.getTime();
+        const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+          
+          const hasAccess = parsedTrial.isActive && daysRemaining > 0;
+          setHasTrialAccess(hasAccess);
+          console.log('Trial access check from localStorage:', hasAccess, 'days remaining:', daysRemaining);
+          return;
+        } catch (parseError) {
+          console.log('Failed to parse localStorage trial data');
+        }
+      }
+      
+      // If no localStorage trial, check if this is a new user and initialize trial
+      // For new users, assume they're within 7 days if no created_at or if created_at is recent
+      const userCreatedAt = user.created_at ? new Date(user.created_at) : new Date();
+      const daysSinceCreation = Math.ceil((Date.now() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // If user is new (no created_at) or within 7 days, give them trial
+      if (!user.created_at || daysSinceCreation <= 7) {
+        // This is a new user within 7 days, initialize trial
+        const startDate = userCreatedAt;
+        // Set end date to exactly 7 days from start (midnight to midnight)
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 7);
+        endDate.setHours(23, 59, 59, 999); // End of day
+        
+        // Calculate exact days remaining
+        const now = new Date();
+        const timeDiff = endDate.getTime() - now.getTime();
+        const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+        
+        const newTrialStatus = {
+          isActive: true,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          daysRemaining,
+          isExpired: daysRemaining <= 0
+        };
+        
+        // Save to localStorage
+        localStorage.setItem('user_trial_status', JSON.stringify(newTrialStatus));
+        setHasTrialAccess(true);
+        console.log('✅ Initialized trial for new user in Courses:', newTrialStatus);
+      } else {
+        // User is older than 7 days, no trial
+        setHasTrialAccess(false);
+        console.log('User is older than 7 days, no trial available');
+      }
+      
+      // Try database query as well (for when table exists)
+      try {
+        const trialAccess = await TrialManager.hasTrialAccess(user.id);
+        setHasTrialAccess(trialAccess);
+        console.log('Trial access check from database:', trialAccess);
+      } catch (dbError) {
+        console.log('Database table user_trials not available yet');
+      }
+    } catch (error) {
+      console.error('Error in checkTrialAccess:', error);
+      setHasTrialAccess(false);
+    }
+  };
 
   // Fetch courses from database with pagination
   const fetchCourses = async (page = 0, append = false) => {
@@ -311,7 +390,20 @@ const Courses: React.FC = () => {
   // Fetch courses on component mount only
   useEffect(() => {
     fetchCourses(0, false);
-  }, []); // Empty dependency array - only run once on mount
+    if (user?.id) {
+      checkTrialAccess();
+    }
+  }, [user?.id]); // Run when user changes
+
+  // Debug logging for trial access
+  useEffect(() => {
+    console.log('🔍 Trial access debug:', {
+      user: user?.id,
+      hasTrialAccess,
+      subActive: localStorage.getItem('subscription_active') === 'true',
+      trialStatus: localStorage.getItem('user_trial_status')
+    });
+  }, [user?.id, hasTrialAccess]);
 
   // Debounce search term to prevent excessive filtering
   useEffect(() => {
@@ -394,11 +486,11 @@ const Courses: React.FC = () => {
   };
 
   const goToAccess = () => {
-    if (user && localStorage.getItem('subscription_active') === 'true') {
-      // User has active subscription - go to dashboard
+    if (user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess)) {
+      // User has active subscription or trial access - go to dashboard
       navigate('/dashboard');
     } else if (user) {
-      // User is signed in but no active subscription - go to profile to upgrade
+      // User is signed in but no active subscription or trial - go to profile to upgrade
       navigate('/profile');
     } else {
       // User is not signed in - go to sign in page
@@ -407,11 +499,11 @@ const Courses: React.FC = () => {
   };
 
   const handleEnroll = (courseId: string) => {
-    if (user && localStorage.getItem('subscription_active') === 'true') {
-      // User is signed in and has active subscription - go to course overview
+    if (user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess)) {
+      // User is signed in and has active subscription OR trial access - go to course overview
       navigate(`/course/${courseId}/overview`);
     } else if (user) {
-      // User is signed in but no active subscription - go to profile to upgrade
+      // User is signed in but no active subscription or trial - go to profile to upgrade
       navigate('/profile');
     } else {
       // User is not signed in - go to sign in page
@@ -453,8 +545,8 @@ const Courses: React.FC = () => {
           </p>
         </div>
 
-        {/* Membership Notice - Only show when subscription is not active */}
-        {(!user || localStorage.getItem('subscription_active') !== 'true') && (
+        {/* Membership Notice - Only show when subscription is not active and no trial access */}
+        {(!user || (localStorage.getItem('subscription_active') !== 'true' && !hasTrialAccess)) && (
         <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 mb-8 text-white">
           <div className="flex items-center justify-center space-x-3">
             <FaLock className="h-6 w-6" />
@@ -650,11 +742,11 @@ const Courses: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="text-lg font-semibold text-primary-600">
-                      {user && localStorage.getItem('subscription_active') === 'true' ? 'Full Access' : 'Membership Access'}
+                      {user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess) ? 'Full Access' : 'Membership Access'}
                     </span>
                   </div>
                   <button onClick={() => handleEnroll(course.id)} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors duration-200 flex items-center space-x-2">
-                    {user && localStorage.getItem('subscription_active') === 'true' ? (
+                    {user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess) ? (
                       <>
                       <FaUnlock className="h-4 w-4" />
                         <span>Start Learning</span>
@@ -712,8 +804,8 @@ const Courses: React.FC = () => {
           </div>
         )}
 
-        {/* Membership CTA - Only show when subscription is not active */}
-        {(!user || localStorage.getItem('subscription_active') !== 'true') && (
+        {/* Membership CTA - Only show when subscription is not active and no trial access */}
+        {(!user || (localStorage.getItem('subscription_active') !== 'true' && !hasTrialAccess)) && (
         <div className="mt-12 bg-gradient-to-r from-primary-50 to-secondary-50 rounded-xl p-8 text-center">
           <div className="max-w-2xl mx-auto">
             <h3 className="text-2xl font-bold text-primary-900 mb-4">

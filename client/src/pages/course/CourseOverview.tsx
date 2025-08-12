@@ -12,6 +12,7 @@ const CourseOverview: React.FC = () => {
   const [course, setCourse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userProgress, setUserProgress] = useState<number>(0);
 
   // Fetch course data
   useEffect(() => {
@@ -70,6 +71,57 @@ const CourseOverview: React.FC = () => {
 
     fetchCourse();
   }, [id]);
+
+  // Fetch user progress for this course
+  useEffect(() => {
+    const fetchUserProgress = async () => {
+      if (!id || !user?.id) return;
+      
+      try {
+        // First check localStorage for recent progress
+        const recentCourseId = localStorage.getItem('recent_course_id');
+        const recentCourseProgress = localStorage.getItem('recent_course_progress');
+        const isCompleted = localStorage.getItem('recent_course_completed') === 'true';
+        
+        if (recentCourseId === id) {
+          if (isCompleted) {
+            setUserProgress(100);
+          } else {
+            setUserProgress(parseInt(recentCourseProgress || '0'));
+          }
+          return;
+        }
+        
+        // Try to fetch from database
+        try {
+          const { data: progressData, error: progressError } = await supabase
+            .from('user_courses')
+            .select('progress, completed_lessons, is_completed')
+            .eq('user_id', user.id)
+            .eq('course_id', id)
+            .single();
+          
+          if (!progressError && progressData) {
+            if (progressData.is_completed) {
+              setUserProgress(100);
+            } else {
+              setUserProgress(progressData.progress || 0);
+            }
+          }
+        } catch (dbError) {
+          console.log('Could not fetch progress from database, using localStorage fallback');
+          // Use localStorage fallback
+          if (recentCourseId === id) {
+            setUserProgress(parseInt(recentCourseProgress || '0'));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user progress:', error);
+      }
+    };
+
+    fetchUserProgress();
+  }, [id, user?.id]);
 
   // Helper function to calculate total duration from videos
   const calculateTotalDuration = (videos: any[]): string => {
@@ -216,7 +268,10 @@ const CourseOverview: React.FC = () => {
             <div className="flex items-center gap-4">
               <button onClick={startCourse} className="bg-white text-primary-700 font-semibold px-5 py-2 rounded-lg hover:bg-primary-50 transition">Start Course</button>
               <div className="bg-white/10 rounded-full p-1">
-                <ProgressRing size={64} strokeWidth={6} progress={0} />
+                <ProgressRing size={64} strokeWidth={6} progress={userProgress} />
+                <div className="text-center mt-2 text-sm">
+                  <span className="font-semibold">{userProgress}%</span>
+                </div>
               </div>
             </div>
           </div>

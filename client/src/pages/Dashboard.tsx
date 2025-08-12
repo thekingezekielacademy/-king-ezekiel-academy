@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import TrialBanner from '../components/TrialBanner';
+import { TrialStatus } from '../utils/trialManager';
 import { 
   FaTrophy, 
   FaFire, 
@@ -10,7 +12,6 @@ import {
   FaUsers, 
   FaCrown,
   FaChartLine,
-  FaClock,
   FaCheckCircle,
   FaArrowRight,
   FaUser
@@ -72,11 +73,17 @@ const Dashboard: React.FC = () => {
     class_ranking: 'Top 35%'
   });
   
-  const [trialDaysLeft] = useState(3);
+  const [trialStatus, setTrialStatus] = useState<TrialStatus>({
+    isActive: false,
+    startDate: '',
+    endDate: '',
+    daysRemaining: 0,
+    isExpired: true
+  });
   const [isLoading, setIsLoading] = useState(true);
   
   // Check subscription status
-  const [subActive] = useState<boolean>(() => {
+  const [subActive, setSubActive] = useState<boolean>(() => {
     try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
   });
 
@@ -84,6 +91,153 @@ const Dashboard: React.FC = () => {
   const calculateLevel = (xp: number): number => {
     return Math.floor(xp / 1000) + 1;
   };
+
+  // Fetch subscription status from database
+  const fetchSubscriptionStatus = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Try to fetch from database first
+      const { data: subData, error: subError } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!subError && subData) {
+        setSubActive(true);
+        console.log('✅ Found active subscription in database');
+      } else {
+        // Fallback to localStorage
+        const localSubActive = localStorage.getItem('subscription_active') === 'true';
+        setSubActive(localSubActive);
+        console.log('Using localStorage subscription status:', localSubActive);
+      }
+    } catch (error) {
+      console.log('Database not available, using localStorage fallback');
+      const localSubActive = localStorage.getItem('subscription_active') === 'true';
+      setSubActive(localSubActive);
+    }
+  }, [user?.id]);
+
+  // Fetch trial status
+  const fetchTrialStatus = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      // First check localStorage for trial status
+      const localTrial = localStorage.getItem('user_trial_status');
+      
+      if (localTrial) {
+        try {
+          const parsedTrial = JSON.parse(localTrial);
+                  // Recalculate days remaining - use floor to get exact days, not rounded up
+        const now = new Date();
+        const endDate = new Date(parsedTrial.endDate);
+        const timeDiff = endDate.getTime() - now.getTime();
+        const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+          
+          const updatedTrialStatus = {
+            ...parsedTrial,
+            daysRemaining,
+            isExpired: daysRemaining <= 0
+          };
+          
+          setTrialStatus(updatedTrialStatus);
+          console.log('✅ Found trial status in localStorage:', updatedTrialStatus);
+          return;
+        } catch (parseError) {
+          console.log('Failed to parse localStorage trial data');
+        }
+      }
+      
+      // If no localStorage trial, check if this is a new user and initialize trial
+      // For new users, assume they're within 7 days if no created_at or if created_at is recent
+      const userCreatedAt = user.created_at ? new Date(user.created_at) : new Date();
+      const daysSinceCreation = Math.ceil((Date.now() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // If user is new (no created_at) or within 7 days, give them trial
+      if (!user.created_at || daysSinceCreation <= 7) {
+        // This is a new user within 7 days, initialize trial
+        const startDate = userCreatedAt;
+        // Set end date to exactly 7 days from start (midnight to midnight)
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 7);
+        endDate.setHours(23, 59, 59, 999); // End of day
+        
+        // Calculate exact days remaining
+        const now = new Date();
+        const timeDiff = endDate.getTime() - now.getTime();
+        const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+        
+        const newTrialStatus = {
+          isActive: true,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          daysRemaining,
+          isExpired: daysRemaining <= 0
+        };
+        
+        // Save to localStorage
+        localStorage.setItem('user_trial_status', JSON.stringify(newTrialStatus));
+        setTrialStatus(newTrialStatus);
+        console.log('✅ Initialized trial for new user:', newTrialStatus);
+      } else {
+        // User is older than 7 days, no trial
+        setTrialStatus({
+          isActive: false,
+          startDate: '',
+          endDate: '',
+          daysRemaining: 0,
+          isExpired: true
+        });
+        console.log('User is older than 7 days, no trial available');
+      }
+      
+      // Try database query as well (for when table exists)
+      try {
+        const { data: trialData, error } = await supabase
+          .from('user_trials')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .single();
+
+        if (!error && trialData) {
+          const now = new Date();
+          const endDate = new Date(trialData.end_date);
+          const timeDiff = endDate.getTime() - now.getTime();
+          const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+          
+          const dbTrialStatus = {
+            isActive: true,
+            startDate: trialData.start_date,
+            endDate: trialData.end_date,
+            daysRemaining,
+            isExpired: daysRemaining <= 0
+          };
+          
+          setTrialStatus(dbTrialStatus);
+          console.log('✅ Found trial status in database:', dbTrialStatus);
+        }
+      } catch (dbError) {
+        console.log('Database table user_trials not available yet');
+      }
+    } catch (error) {
+      console.error('Error in fetchTrialStatus:', error);
+      // Set default no trial status
+      setTrialStatus({
+        isActive: false,
+        startDate: '',
+        endDate: '',
+        daysRemaining: 0,
+        isExpired: true
+      });
+    }
+  }, [user?.id]);
 
   // Fetch user stats from database
   const fetchUserStats = useCallback(async () => {
@@ -206,15 +360,17 @@ const Dashboard: React.FC = () => {
               const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
               const hoursAgo = timeDiff / (1000 * 60 * 60);
               
-              if (hoursAgo < 24) { // Within last 24 hours
-                enrolledCourses = [{
-                  course_id: recentCourseId,
-                  progress: parseInt(recentCourseProgress) || 0,
-                  completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
-                  last_accessed: recentTimestamp
-                }];
-                console.log('✅ Found recent course activity in localStorage:', enrolledCourses);
-              }
+                          if (hoursAgo < 24) { // Within last 24 hours
+              const isCompleted = localStorage.getItem('recent_course_completed') === 'true';
+              enrolledCourses = [{
+                course_id: recentCourseId,
+                progress: parseInt(recentCourseProgress) || 0,
+                completed_lessons: isCompleted ? 2 : Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+                last_accessed: recentTimestamp,
+                is_completed: isCompleted
+              }];
+              console.log('✅ Found recent course activity in localStorage:', enrolledCourses);
+            }
             }
           } catch (localStorageError) {
             console.log('Could not check localStorage for recent courses');
@@ -232,15 +388,17 @@ const Dashboard: React.FC = () => {
             const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
             const hoursAgo = timeDiff / (1000 * 60 * 60);
             
-            if (hoursAgo < 24) {
-              enrolledCourses = [{
-                course_id: recentCourseId,
-                progress: parseInt(recentCourseProgress) || 0,
-                completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
-                last_accessed: recentTimestamp
-              }];
-              console.log('✅ Using localStorage fallback for course data');
-            }
+                      if (hoursAgo < 24) {
+            const isCompleted = localStorage.getItem('recent_course_completed') === 'true';
+            enrolledCourses = [{
+              course_id: recentCourseId,
+              progress: parseInt(recentCourseProgress) || 0,
+              completed_lessons: isCompleted ? 2 : Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+              last_accessed: recentTimestamp,
+              is_completed: isCompleted
+            }];
+            console.log('✅ Using localStorage fallback for course data');
+          }
           }
         } catch (localStorageError) {
           console.log('Could not use localStorage fallback');
@@ -295,6 +453,56 @@ const Dashboard: React.FC = () => {
           enrolledStudents: 1247, // We can add enrollment count later
           image: courseData.cover_photo_url || '/api/placeholder/300/200'
         });
+      } else {
+        // Check localStorage for recent activity if no database records
+        try {
+          const recentCourseId = localStorage.getItem('recent_course_id');
+          const recentCourseProgress = localStorage.getItem('recent_course_progress');
+          const recentTimestamp = localStorage.getItem('recent_course_timestamp');
+          
+          if (recentCourseId && recentCourseProgress && recentTimestamp) {
+            const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
+            const hoursAgo = timeDiff / (1000 * 60 * 60);
+            
+            if (hoursAgo < 24) { // Within last 24 hours
+              // Create a temporary current course from localStorage data
+              setCurrentCourse({
+                id: recentCourseId,
+                title: 'Recent Course', // We'll update this when we fetch course details
+                progress: parseInt(recentCourseProgress) || 0,
+                totalLessons: 2, // Default assumption
+                completedLessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+                category: 'General',
+                instructor: 'Admin',
+                rating: 4.8,
+                enrolledStudents: 1247,
+                image: '/api/placeholder/300/200'
+              });
+              
+              // Try to fetch actual course details to update the title
+              try {
+                const { data: courseData } = await supabase
+                  .from('courses')
+                  .select('title, level, cover_photo_url')
+                  .eq('id', recentCourseId)
+                  .single();
+                
+                if (courseData) {
+                  setCurrentCourse(prev => prev ? {
+                    ...prev,
+                    title: courseData.title,
+                    category: courseData.level || 'General',
+                    image: courseData.cover_photo_url || '/api/placeholder/300/200'
+                  } : null);
+                }
+              } catch (fetchError) {
+                console.log('Could not fetch course details for localStorage course');
+              }
+            }
+          }
+        } catch (localStorageError) {
+          console.log('Could not check localStorage for recent courses');
+        }
       }
 
       // Fetch recommended courses (not enrolled)
@@ -345,9 +553,11 @@ const Dashboard: React.FC = () => {
 
   // Fetch stats on component mount
   useEffect(() => {
+    fetchSubscriptionStatus();
     fetchUserStats();
     fetchCourseData();
-  }, [user?.id, fetchUserStats, fetchCourseData]);
+    fetchTrialStatus();
+  }, [user?.id, fetchSubscriptionStatus, fetchUserStats, fetchCourseData, fetchTrialStatus]);
 
   // Real data state
   const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
@@ -553,31 +763,11 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Trial Banner - Only show when subscription is not active */}
-        {trialDaysLeft > 0 && !subActive && (
-          <div className="mb-8 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl shadow-sm border border-red-200 p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <FaClock className="text-red-500 text-xl" />
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-lg">Trial Ending Soon</h3>
-                  <p className="text-sm text-gray-700">
-                    Your trial ends in {trialDaysLeft} days — keep your progress alive for only ₦2,500/month.
-                    <span className="block text-xs text-gray-500 mt-1">Click "Upgrade Now" to manage your subscription</span>
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  // Navigate to Profile page where subscription management is located
-                  navigate('/profile');
-                }}
-                className="bg-red-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center space-x-2"
-              >
-                <span>Upgrade Now</span>
-                <FaArrowRight className="text-sm" />
-              </button>
-            </div>
-          </div>
+        {trialStatus.isActive && !subActive && (
+          <TrialBanner
+            trialStatus={trialStatus}
+            onSubscribe={() => navigate('/profile')}
+          />
         )}
 
         {/* XP System Info Banner */}
@@ -1029,17 +1219,17 @@ const Dashboard: React.FC = () => {
                 <h3 className="font-semibold text-gray-900">Subscription</h3>
               </div>
               
-              {trialDaysLeft > 0 ? (
+              {trialStatus.isActive && !subActive ? (
                 <div className="text-center mb-4">
-                  <div className="text-2xl font-bold text-red-600 mb-2">{trialDaysLeft}</div>
+                  <div className="text-2xl font-bold text-red-600 mb-2">{trialStatus.daysRemaining}</div>
                   <p className="text-sm text-gray-600">trial days left</p>
                   <div className="bg-red-50 rounded-lg p-3 mt-3">
                     <p className="text-xs text-red-800 font-medium">
-                      Upgrade to keep learning!
+                      {trialStatus.daysRemaining <= 3 ? 'Upgrade now to keep learning!' : 'Upgrade to keep learning!'}
                     </p>
                   </div>
                 </div>
-              ) : (
+              ) : subActive ? (
                 <div className="text-center mb-4">
                   <div className="text-2xl font-bold text-green-600 mb-2">Active</div>
                   <p className="text-sm text-gray-600">subscription</p>
@@ -1049,13 +1239,26 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                 </div>
+              ) : (
+                <div className="text-center mb-4">
+                  <div className="text-2xl font-bold text-gray-600 mb-2">No Access</div>
+                  <p className="text-sm text-gray-600">subscription required</p>
+                  <div className="bg-gray-50 rounded-lg p-3 mt-3">
+                    <p className="text-xs text-gray-800 font-medium">
+                      Subscribe to start learning!
+                    </p>
+                  </div>
+                </div>
               )}
               
               <button 
                 onClick={() => navigate('/profile')}
                 className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2"
               >
-                <span>Manage Subscription</span>
+                <span>
+                  {trialStatus.isActive && !subActive ? 'Upgrade Now' : 
+                   subActive ? 'Manage Subscription' : 'Subscribe Here'}
+                </span>
                 <FaArrowRight className="text-sm" />
               </button>
             </div>

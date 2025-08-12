@@ -31,12 +31,7 @@ const Profile: React.FC = () => {
   const [subActive, setSubActive] = useState<boolean>(() => {
     try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
   });
-  const [subRef, setSubRef] = useState<string | null>(() => {
-    try { return localStorage.getItem('subscription_ref') || null; } catch { return null; }
-  });
-  const [subNextRenewal, setSubNextRenewal] = useState<string | null>(() => {
-    try { return localStorage.getItem('subscription_next_renewal') || null; } catch { return null; }
-  });
+  // Removed unused state variables
 
   const [nameInput, setNameInput] = useState(user?.name || '');
   const [bioInput, setBioInput] = useState(user?.bio || '');
@@ -78,10 +73,12 @@ const Profile: React.FC = () => {
         
         if (!subError && subData) {
           setSubscription(subData);
+          setSubActive(true); // Update subscription status
           console.log('✅ Found active subscription:', subData);
         } else {
           console.log('No active subscription found');
           setSubscription(null);
+          setSubActive(false); // Update subscription status
         }
       } catch (tableError) {
         console.log('user_subscriptions table not available yet, using localStorage fallback');
@@ -97,8 +94,10 @@ const Profile: React.FC = () => {
             migration: 'localStorage fallback',
             next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
           });
+          setSubActive(true); // Update subscription status
         } else {
           setSubscription(null);
+          setSubActive(false); // Update subscription status
         }
       }
       
@@ -173,90 +172,6 @@ const Profile: React.FC = () => {
       fetchSubscriptionData();
     }
   }, [user?.id, fetchSubscriptionData]);
-  const fetchSubscriptionData = useCallback(async () => {
-    if (!user?.id) return;
-    
-    try {
-      setSubscriptionLoading(true);
-      setBillingLoading(true);
-      
-      // Fetch active subscription
-      try {
-        const { data: subData, error: subError } = await supabase
-          .from('user_subscriptions')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-        
-        if (!subError && subData) {
-          setSubscription(subData);
-          console.log('✅ Found active subscription:', subData);
-        } else {
-          console.log('No active subscription found');
-          setSubscription(null);
-        }
-      } catch (tableError) {
-        console.log('user_subscriptions table not available yet, using localStorage fallback');
-        // Check localStorage for fallback data
-        const localSubActive = localStorage.getItem('subscription_active') === 'true';
-        if (localSubActive) {
-          setSubscription({
-            plan_name: 'Monthly Membership',
-            status: 'active',
-            amount: 250000,
-            currency: 'NGN',
-            start_date: new Date().toISOString(),
-            next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
-          });
-        } else {
-          setSubscription(null);
-        }
-      }
-      
-      // Fetch billing history
-      try {
-        const { data: billingData, error: billingError } = await supabase
-          .from('subscription_payments')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        
-        if (!billingError && billingData) {
-          setBillingHistory(billingData);
-          console.log('✅ Found billing history:', billingData);
-        } else {
-          console.log('No billing history found');
-          setBillingHistory([]);
-        }
-      } catch (tableError) {
-        console.log('subscription_payments table not available yet, using localStorage fallback');
-        // Check localStorage for fallback data
-        const localSubActive = localStorage.getItem('subscription_active') === 'true';
-        if (localSubActive) {
-          setBillingHistory([{
-            id: 'local-1',
-            amount: 250000,
-            currency: 'NGN',
-            status: 'success',
-            created_at: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
-          }]);
-        } else {
-          setBillingHistory([]);
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error fetching subscription data:', error);
-      setSubscription(null);
-      setBillingHistory([]);
-    } finally {
-      setSubscriptionLoading(false);
-      setBillingLoading(false);
-    }
-  }, [user?.id]);
 
   const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
@@ -324,83 +239,93 @@ const Profile: React.FC = () => {
           // Verify the payment was successful
           if (response.status === 'success') {
             try {
-              // Store subscription data locally as fallback
-              localStorage.setItem('subscription_active', 'true');
-              localStorage.setItem('subscription_ref', response.reference || ref);
-              localStorage.setItem('subscription_amount', '2500');
-              localStorage.setItem('subscription_currency', 'NGN');
-              
               // Calculate next renewal date
               const next = new Date();
               next.setMonth(next.getMonth() + 1);
               const nextStr = next.toISOString().slice(0,10);
-              localStorage.setItem('subscription_next_renewal', nextStr);
               
-              // Update UI state
+              // Update UI state immediately
               setSubActive(true);
-              setSubRef(response.reference || ref);
-              setSubNextRenewal(nextStr);
               setShowManageSubscription(false);
               
               setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
               
-              // Save to database (non-blocking)
+              // Save to database FIRST (this is the primary storage)
               if (user?.id) {
                 // Use setTimeout to avoid blocking the callback
-                setTimeout(async () => {
-                  try {
-                    // Save subscription record
-                    const { error: subError } = await supabase
-                      .from('user_subscriptions')
-                      .insert({
-                        user_id: user.id,
-                        paystack_subscription_id: response.reference || ref,
-                        paystack_customer_code: user.email,
-                        plan_name: 'Monthly Membership',
-                        status: 'active',
-                        amount: 250000, // ₦2,500 in kobo
-                        currency: 'NGN',
-                        start_date: new Date().toISOString(),
-                        next_payment_date: next.toISOString(),
-                      });
-                    
-                    if (subError) {
-                      console.error('Error saving subscription:', subError);
-                    } else {
-                      console.log('✅ Subscription saved to database');
+                setTimeout(() => {
+                  // Create an async function inside setTimeout
+                  const saveToDatabase = async () => {
+                    try {
+                      // Save subscription record
+                      const { error: subError } = await supabase
+                        .from('user_subscriptions')
+                        .insert({
+                          user_id: user.id,
+                          paystack_subscription_id: response.reference || ref,
+                          paystack_customer_code: user.email,
+                          plan_name: 'Monthly Membership',
+                          status: 'active',
+                          amount: 250000, // ₦2,500 in kobo
+                          currency: 'NGN',
+                          start_date: new Date().toISOString(),
+                          next_payment_date: next.toISOString(),
+                        });
+                      
+                      if (subError) {
+                        console.error('Error saving subscription to database:', subError);
+                        // Only use localStorage if database save fails
+                        localStorage.setItem('subscription_active', 'true');
+                        localStorage.setItem('subscription_ref', response.reference || ref);
+                        localStorage.setItem('subscription_amount', '2500');
+                        localStorage.setItem('subscription_currency', 'NGN');
+                        localStorage.setItem('subscription_next_renewal', nextStr);
+                      } else {
+                        console.log('✅ Subscription saved to database successfully');
+                      }
+                      
+                      // Save payment record
+                      const { error: paymentError } = await supabase
+                        .from('subscription_payments')
+                        .insert({
+                          user_id: user.id,
+                          paystack_transaction_id: response.reference || ref,
+                          paystack_reference: response.reference || ref,
+                          amount: 250000, // ₦2,500 in kobo
+                          currency: 'NGN',
+                          status: 'success',
+                          payment_method: 'card',
+                          paid_at: new Date().toISOString(),
+                        });
+                      
+                      if (paymentError) {
+                        console.error('Error saving payment to database:', paymentError);
+                      } else {
+                        console.log('✅ Payment saved to database successfully');
+                      }
+                      
+                      // Refresh subscription data to show updated status
+                      fetchSubscriptionData();
+                      
+                    } catch (error) {
+                      console.error('Error saving to database:', error);
+                      // Fallback to localStorage only if database completely fails
+                      localStorage.setItem('subscription_active', 'true');
+                      localStorage.setItem('subscription_ref', response.reference || ref);
+                      localStorage.setItem('subscription_amount', '2500');
+                      localStorage.setItem('subscription_currency', 'NGN');
+                      localStorage.setItem('subscription_next_renewal', nextStr);
                     }
-                    
-                    // Save payment record
-                    const { error: paymentError } = await supabase
-                      .from('subscription_payments')
-                      .insert({
-                        user_id: user.id,
-                        paystack_transaction_id: response.reference || ref,
-                        paystack_reference: response.reference || ref,
-                        amount: 250000, // ₦2,500 in kobo
-                        currency: 'NGN',
-                        status: 'success',
-                        payment_method: 'card',
-                        paid_at: new Date().toISOString(),
-                      });
-                    
-                    if (paymentError) {
-                      console.error('Error saving payment:', paymentError);
-                    } else {
-                      console.log('✅ Payment saved to database');
-                    }
-                    
-                    // Refresh subscription data
-                    fetchSubscriptionData();
-                    
-                  } catch (error) {
-                    console.error('Error saving to database:', error);
-                  }
+                  };
+                  
+                  // Call the async function
+                  saveToDatabase();
                 }, 100);
               }
               
               // Send verification to your backend
               verifyPaymentOnServer(response.reference, user.id);
+
               
             } catch(e) {
               console.error('Error storing subscription data:', e);
@@ -450,11 +375,11 @@ const Profile: React.FC = () => {
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `avatars/${user.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(upErr.message || 'Failed to upload file');
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
       const publicUrl = data.publicUrl;
       const { error: updErr } = await updateProfile({ avatar_url: publicUrl } as any);
-      if (updErr) throw updErr as any;
+      if (updErr) throw new Error(updErr.message || 'Failed to update avatar URL');
       setMessage('Profile photo updated');
       try { await fetchProfile(); } catch (_) {}
       clearTimeout(safety);
@@ -484,7 +409,7 @@ const Profile: React.FC = () => {
         }
       } catch (_) {}
       const { error: updErr } = await updateProfile({ avatar_url: null as any });
-      if (updErr) throw updErr as any;
+      if (updErr) throw new Error(updErr.message || 'Failed to remove avatar');
       setMessage('Profile photo removed');
       try { await fetchProfile(); } catch (_) {}
       clearTimeout(safety);
@@ -520,9 +445,9 @@ const Profile: React.FC = () => {
             p_bio: null,
             p_role: null,
           });
-          if (rpcErr) throw rpcErr as any;
+          if (rpcErr) throw new Error(rpcErr.message || 'Failed to create profile');
         } else {
-          throw updErr as any;
+          throw new Error(updErr.message || 'Failed to update name');
         }
       }
       setShowEditName(false);
@@ -545,7 +470,7 @@ const Profile: React.FC = () => {
     setMessage(null);
     try {
       const { error: updErr } = await updateProfile({ bio: bioInput } as any);
-      if (updErr) throw updErr as any;
+      if (updErr) throw new Error(updErr.message || 'Failed to update bio');
       setShowEditBio(false);
       setMessage('Bio updated');
       await fetchProfile();
@@ -566,7 +491,7 @@ const Profile: React.FC = () => {
     setMessage(null);
     try {
       const { error: updErr } = await supabase.auth.updateUser({ password: newPassword });
-      if (updErr) throw updErr as any;
+      if (updErr) throw new Error(updErr.message || 'Failed to update password');
       setShowChangePassword(false);
       setMessage('Password updated');
       setNewPassword('');
@@ -681,11 +606,11 @@ const Profile: React.FC = () => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                 <span className="ml-2 text-gray-600">Loading...</span>
               </div>
-            ) : subscription ? (
+            ) : (subscription || subActive) ? (
               <div className="space-y-2 text-sm text-gray-700">
                 <div className="flex items-center justify-between">
                   <span>Plan</span>
-                  <span className="font-medium text-primary-700">{subscription.plan_name}</span>
+                  <span className="font-medium text-primary-700">{subscription?.plan_name || 'Monthly Membership'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Status</span>
@@ -693,13 +618,13 @@ const Profile: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Amount</span>
-                  <span className="font-medium text-primary-700">₦{(subscription.amount / 100).toLocaleString()}</span>
+                  <span className="font-medium text-primary-700">₦{(subscription?.amount || 250000) / 100}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Started</span>
-                  <span>{new Date(subscription.start_date).toLocaleDateString()}</span>
+                  <span>{subscription?.start_date ? new Date(subscription.start_date).toLocaleDateString() : 'Recently'}</span>
                 </div>
-                {subscription.next_payment_date && (
+                {subscription?.next_payment_date && (
                   <div className="flex items-center justify-between">
                     <span>Next Payment</span>
                     <span>{new Date(subscription.next_payment_date).toLocaleDateString()}</span>
@@ -723,11 +648,11 @@ const Profile: React.FC = () => {
               </div>
             )}
             <button onClick={() => setShowManageSubscription(true)} className={`mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-              subscription 
+              (subscription || subActive)
                 ? 'border rounded-lg hover:bg-gray-50' 
                 : 'bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
             }`}>
-              {subscription ? 'Manage Subscription' : 'Subscribe here'}
+              {(subscription || subActive) ? 'Manage Subscription' : 'Subscribe here'}
             </button>
             <button
               onClick={fetchSubscriptionData}
@@ -980,8 +905,6 @@ const Profile: React.FC = () => {
                           localStorage.removeItem('subscription_ref');
                           localStorage.removeItem('subscription_next_renewal');
                           setSubActive(false);
-                          setSubRef(null);
-                          setSubNextRenewal(null);
                           setMessage('Subscription canceled. You will retain access until the end of the current billing period.');
                         } catch {}
                         setShowCancelFlow(false);

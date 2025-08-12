@@ -134,7 +134,7 @@ const LessonPlayer: React.FC = () => {
     };
 
     fetchCourseAndLesson();
-  }, [id, lessonId]);
+  }, [id, lessonId, user?.id]);
 
   // Handle video player events
   const handleVideoPlay = () => {
@@ -209,6 +209,7 @@ const LessonPlayer: React.FC = () => {
         const totalLessons = course?.course_videos?.length || 1;
         const progressPercentage = Math.round((currentProgress / totalLessons) * 100);
         
+        localStorage.setItem('recent_course_id', id); // Add course ID
         localStorage.setItem('recent_course_progress', progressPercentage.toString());
         localStorage.setItem('recent_course_timestamp', new Date().toISOString());
         console.log('✅ Progress updated in localStorage:', progressPercentage + '%');
@@ -225,6 +226,58 @@ const LessonPlayer: React.FC = () => {
     if (course?.course_videos && currentLessonIndex < course.course_videos.length - 1) {
       const nextVideo = course.course_videos[currentLessonIndex + 1];
       navigate(`/course/${id}/lesson/${nextVideo.id}`);
+    }
+  };
+
+  const handleCourseCompletion = async () => {
+    try {
+      // Mark course as completed in database
+      const { error: completionError } = await supabase
+        .from('user_courses')
+        .upsert({
+          user_id: user.id,
+          course_id: id,
+          progress: 100,
+          completed_lessons: course?.course_videos?.length || 0,
+          last_accessed: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          is_completed: true
+        });
+
+      if (completionError) {
+        console.log('Could not save course completion to database, using localStorage fallback');
+      }
+
+      // Award bonus XP for completing entire course (200 XP bonus)
+      try {
+        const { error: xpError } = await supabase.rpc('update_user_xp_and_streak', {
+          user_id: user.id,
+          xp_gain: 200,
+          activity_type: 'course_completed'
+        });
+
+        if (!xpError) {
+          console.log('✅ Awarded 200 XP bonus for completing course');
+        } else {
+          console.log('Could not award course completion XP:', xpError);
+        }
+      } catch (xpError) {
+        console.log('XP system not available yet');
+      }
+
+      // Update localStorage
+      localStorage.setItem('recent_course_id', id);
+      localStorage.setItem('recent_course_progress', '100');
+      localStorage.setItem('recent_course_timestamp', new Date().toISOString());
+      localStorage.setItem('recent_course_completed', 'true');
+
+      // Show completion message and redirect to courses page
+      alert('🎉 Congratulations! You have completed this course!');
+      navigate('/courses');
+    } catch (error) {
+      console.error('Error completing course:', error);
+      // Still redirect even if saving fails
+      navigate('/courses');
     }
   };
 
@@ -437,13 +490,23 @@ const LessonPlayer: React.FC = () => {
                 >
                   Previous Lesson
                 </button>
-                <button 
-                  onClick={nextLesson} 
-                  disabled={!course?.course_videos || currentLessonIndex >= (course.course_videos?.length || 0) - 1}
-                  className={`px-4 py-2 rounded-lg border ${!course?.course_videos || currentLessonIndex >= (course.course_videos?.length || 0) - 1 ? 'text-gray-400 border-gray-200 cursor-not-allowed bg-gray-50' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-                >
-                  Next Lesson
-                </button>
+                {currentLessonIndex >= (course.course_videos?.length || 0) - 1 ? (
+                  // Last lesson - show Complete Course button
+                  <button 
+                    onClick={handleCourseCompletion}
+                    className="px-6 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors font-medium"
+                  >
+                    🎉 Complete Course
+                  </button>
+                ) : (
+                  // Not last lesson - show Next Lesson button
+                  <button 
+                    onClick={nextLesson} 
+                    className="px-4 py-2 rounded-lg border bg-primary-600 text-white hover:bg-primary-700"
+                  >
+                    Next Lesson
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { User, Session, AuthError, PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import TrialManager from '../utils/trialManager';
 
 interface UserProfile {
   id: string;
@@ -236,6 +237,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.error('Error creating profile:', profileError);
       } else {
         console.log('Profile created successfully');
+        
+        // Initialize 7-day free trial for new user
+        try {
+          await TrialManager.initializeTrial(data.user.id);
+          console.log('✅ 7-day free trial initialized for new user');
+        } catch (trialError) {
+          console.error('Failed to initialize trial:', trialError);
+          // Don't fail signup if trial initialization fails
+        }
       }
     }
 

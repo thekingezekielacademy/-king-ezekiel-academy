@@ -1,141 +1,295 @@
-// Trial Management System for 7-Day Free Trial
+import { supabase } from '../lib/supabase';
+
 export interface TrialStatus {
   isActive: boolean;
-  daysLeft: number;
-  trialStartDate: string;
-  trialEndDate: string;
-  canAccessCourses: boolean;
-  message: string;
+  startDate: string;
+  endDate: string;
+  daysRemaining: number;
+  isExpired: boolean;
 }
 
 export class TrialManager {
-  // Check if user has active trial
-  static checkTrialStatus(user: any): TrialStatus {
-    if (!user) {
+  private static TRIAL_DURATION_DAYS = 7;
+  private static TRIAL_STORAGE_KEY = 'user_trial_status';
+
+  /**
+   * Initialize trial for a new user
+   */
+  static async initializeTrial(userId: string): Promise<TrialStatus> {
+    try {
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(startDate.getDate() + this.TRIAL_DURATION_DAYS);
+
+      const trialData = {
+        user_id: userId,
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+
+      // Try to save to database first
+      try {
+        const { error } = await supabase
+          .from('user_trials')
+          .insert(trialData);
+
+        if (error) {
+          console.log('Could not save trial to database, using localStorage fallback');
+        }
+      } catch (dbError) {
+        console.log('Database not available, using localStorage fallback');
+      }
+
+      // Always save to localStorage as fallback
+      const trialStatus: TrialStatus = {
+        isActive: true,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        daysRemaining: this.TRIAL_DURATION_DAYS,
+        isExpired: false
+      };
+
+      localStorage.setItem(this.TRIAL_STORAGE_KEY, JSON.stringify(trialStatus));
+      
+      console.log('✅ Trial initialized for user:', userId, trialStatus);
+      return trialStatus;
+    } catch (error) {
+      console.error('Failed to initialize trial:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current trial status for a user
+   */
+  static async getTrialStatus(userId: string): Promise<TrialStatus> {
+    try {
+      // Try database first
+      try {
+        const { data: trialData, error } = await supabase
+          .from('user_trials')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .single();
+
+        if (!error && trialData) {
+          const status = this.calculateTrialStatus(trialData.start_date, trialData.end_date);
+          console.log('✅ Found trial status in database:', status);
+          return status;
+        }
+      } catch (dbError) {
+        console.log('Database query failed, checking localStorage fallback');
+      }
+
+      // Fallback to localStorage
+      const localTrial = localStorage.getItem(this.TRIAL_STORAGE_KEY);
+      if (localTrial) {
+        try {
+          const trialStatus: TrialStatus = JSON.parse(localTrial);
+          // Recalculate days remaining
+          const updatedStatus = this.calculateTrialStatus(trialStatus.startDate, trialStatus.endDate);
+          
+          // Update localStorage with recalculated status
+          localStorage.setItem(this.TRIAL_STORAGE_KEY, JSON.stringify(updatedStatus));
+          
+          console.log('✅ Using localStorage trial status:', updatedStatus);
+          return updatedStatus;
+        } catch (parseError) {
+          console.log('Failed to parse localStorage trial data');
+        }
+      }
+
+      // No trial found
+      const noTrialStatus: TrialStatus = {
+        isActive: false,
+        startDate: '',
+        endDate: '',
+        daysRemaining: 0,
+        isExpired: true
+      };
+
+      console.log('No trial found for user:', userId);
+      return noTrialStatus;
+    } catch (error) {
+      console.error('Failed to get trial status:', error);
       return {
         isActive: false,
-        daysLeft: 0,
-        trialStartDate: '',
-        trialEndDate: '',
-        canAccessCourses: false,
-        message: 'Please sign in to access your trial'
+        startDate: '',
+        endDate: '',
+        daysRemaining: 0,
+        isExpired: true
       };
     }
+  }
 
-    // Check if user has subscription (overrides trial)
-    const hasSubscription = localStorage.getItem('subscription_active') === 'true';
-    if (hasSubscription) {
-      return {
-        isActive: false,
-        daysLeft: 0,
-        trialStartDate: '',
-        trialEndDate: '',
-        canAccessCourses: true,
-        message: 'You have an active subscription'
-      };
+  /**
+   * Check if user has active trial access
+   */
+  static async hasTrialAccess(userId: string): Promise<boolean> {
+    try {
+      const trialStatus = await this.getTrialStatus(userId);
+      return trialStatus.isActive && !trialStatus.isExpired;
+    } catch (error) {
+      console.error('Failed to check trial access:', error);
+      return false;
     }
+  }
 
-    // Check trial dates
-    const trialStart = user.trial_start_date || user.created_at;
-    const trialEnd = user.trial_end_date || this.calculateTrialEnd(user.created_at);
-    
-    if (!trialStart || !trialEnd) {
-      return {
-        isActive: false,
-        daysLeft: 0,
-        trialStartDate: '',
-        trialEndDate: '',
-        canAccessCourses: false,
-        message: 'Trial not available'
-      };
-    }
-
+  /**
+   * Calculate trial status based on dates
+   */
+  private static calculateTrialStatus(startDate: string, endDate: string): TrialStatus {
     const now = new Date();
-    const endDate = new Date(trialEnd);
-    const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (daysLeft <= 0) {
-      return {
-        isActive: false,
-        daysLeft: 0,
-        trialStartDate: trialStart,
-        trialEndDate: trialEnd,
-        canAccessCourses: false,
-        message: 'Your 7-day trial has expired. Subscribe to continue learning!'
-      };
-    }
-
+    const end = new Date(endDate);
+    
+    const isExpired = now > end;
+    const timeDiff = end.getTime() - now.getTime();
+    const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+    
     return {
-      isActive: true,
-      daysLeft: Math.max(0, daysLeft),
-      trialStartDate: trialStart,
-      trialEndDate: trialEnd,
-      canAccessCourses: true,
-      message: `You have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in your free trial`
+      isActive: !isExpired,
+      startDate,
+      endDate,
+      daysRemaining,
+      isExpired
     };
   }
 
-  // Calculate trial end date (7 days from start)
-  static calculateTrialEnd(startDate: string): string {
-    const start = new Date(startDate);
-    const end = new Date(start.getTime() + (7 * 24 * 60 * 60 * 1000));
-    return end.toISOString();
+  /**
+   * Extend trial (for admin use)
+   */
+  static async extendTrial(userId: string, additionalDays: number): Promise<TrialStatus> {
+    try {
+      const currentStatus = await this.getTrialStatus(userId);
+      
+      if (!currentStatus.isActive) {
+        throw new Error('Cannot extend expired trial');
+      }
+
+      const newEndDate = new Date(currentStatus.endDate);
+      newEndDate.setDate(newEndDate.getDate() + additionalDays);
+
+      const updatedStatus: TrialStatus = {
+        ...currentStatus,
+        endDate: newEndDate.toISOString(),
+        daysRemaining: currentStatus.daysRemaining + additionalDays
+      };
+
+      // Update database
+      try {
+        const { error } = await supabase
+          .from('user_trials')
+          .update({
+            end_date: newEndDate.toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('is_active', true);
+
+        if (error) {
+          console.log('Could not update trial in database');
+        }
+      } catch (dbError) {
+        console.log('Database not available for trial extension');
+      }
+
+      // Update localStorage
+      localStorage.setItem(this.TRIAL_STORAGE_KEY, JSON.stringify(updatedStatus));
+      
+      console.log('✅ Trial extended for user:', userId, 'by', additionalDays, 'days');
+      return updatedStatus;
+    } catch (error) {
+      console.error('Failed to extend trial:', error);
+      throw error;
+    }
   }
 
-  // Check if user can access a specific course
-  static canAccessCourse(user: any, courseId?: string): boolean {
-    const trialStatus = this.checkTrialStatus(user);
-    return trialStatus.canAccessCourses;
+  /**
+   * End trial early (for admin use)
+   */
+  static async endTrial(userId: string): Promise<void> {
+    try {
+      // Update database
+      try {
+        const { error } = await supabase
+          .from('user_trials')
+          .update({
+            is_active: false,
+            ended_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('is_active', true);
+
+        if (error) {
+          console.log('Could not end trial in database');
+        }
+      } catch (dbError) {
+        console.log('Database not available for ending trial');
+      }
+
+      // Remove from localStorage
+      localStorage.removeItem(this.TRIAL_STORAGE_KEY);
+      
+      console.log('✅ Trial ended for user:', userId);
+    } catch (error) {
+      console.error('Failed to end trial:', error);
+      throw error;
+    }
   }
 
-  // Get trial progress percentage
-  static getTrialProgress(user: any): number {
-    if (!user) return 0;
-
-    const trialStart = new Date(user.trial_start_date || user.created_at);
-    const trialEnd = new Date(user.trial_end_date || this.calculateTrialEnd(user.created_at));
-    const now = new Date();
-
-    const totalDuration = trialEnd.getTime() - trialStart.getTime();
-    const elapsed = now.getTime() - trialStart.getTime();
-
-    if (totalDuration <= 0) return 100;
-    
-    const progress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
-    return Math.round(progress);
-  }
-
-  // Format trial message for UI
-  static formatTrialMessage(user: any): string {
-    const trialStatus = this.checkTrialStatus(user);
-    
-    if (trialStatus.canAccessCourses && trialStatus.isActive) {
-      return `🎉 ${trialStatus.message}`;
-    } else if (trialStatus.canAccessCourses && !trialStatus.isActive) {
-      return `✅ ${trialStatus.message}`;
+  /**
+   * Get trial expiration message
+   */
+  static getTrialExpirationMessage(daysRemaining: number): string {
+    if (daysRemaining === 0) {
+      return 'Your free trial has expired. Subscribe now to continue learning!';
+    } else if (daysRemaining === 1) {
+      return 'Your free trial expires tomorrow. Subscribe now to keep learning!';
+    } else if (daysRemaining <= 3) {
+      return `Your free trial expires in ${daysRemaining} days. Subscribe now to keep learning!`;
     } else {
-      return `🔒 ${trialStatus.message}`;
+      return `You have ${daysRemaining} days left in your free trial.`;
     }
   }
 
-  // Check if trial is about to expire (within 24 hours)
-  static isTrialExpiringSoon(user: any): boolean {
-    const trialStatus = this.checkTrialStatus(user);
-    return trialStatus.isActive && trialStatus.daysLeft <= 1;
+  /**
+   * Check if user needs trial banner
+   */
+  static shouldShowTrialBanner(daysRemaining: number): boolean {
+    return daysRemaining <= 3 && daysRemaining > 0;
   }
 
-  // Get trial expiration warning
-  static getExpirationWarning(user: any): string | null {
-    if (!this.isTrialExpiringSoon(user)) return null;
-    
-    const trialStatus = this.checkTrialStatus(user);
-    if (trialStatus.daysLeft === 0) {
-      return '⚠️ Your trial expires today! Subscribe now to keep learning.';
-    } else if (trialStatus.daysLeft === 1) {
-      return '⚠️ Your trial expires tomorrow! Subscribe now to keep learning.';
+  /**
+   * Reset trial for testing purposes (for admin use)
+   */
+  static resetTrialForTesting(userId: string): void {
+    try {
+      // Clear existing trial data
+      localStorage.removeItem(this.TRIAL_STORAGE_KEY);
+      
+      // Initialize a fresh trial
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(startDate.getDate() + this.TRIAL_DURATION_DAYS);
+      endDate.setHours(23, 59, 59, 999); // End of day
+      
+      const newTrialStatus: TrialStatus = {
+        isActive: true,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        daysRemaining: this.TRIAL_DURATION_DAYS,
+        isExpired: false
+      };
+      
+      localStorage.setItem(this.TRIAL_STORAGE_KEY, JSON.stringify(newTrialStatus));
+      console.log('✅ Trial reset for testing:', newTrialStatus);
+    } catch (error) {
+      console.error('Failed to reset trial for testing:', error);
     }
-    
-    return null;
   }
 }
 
