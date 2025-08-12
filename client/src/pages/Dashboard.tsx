@@ -179,35 +179,73 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Check localStorage for recent course activity (since database tables don't exist yet)
+      // Try database queries first, then fall back to localStorage
       let enrolledCourses = [];
+      
       try {
-        // Check if user has been to any course pages recently (stored in localStorage)
-        const recentCourseId = localStorage.getItem('recent_course_id');
-        const recentCourseProgress = localStorage.getItem('recent_course_progress');
-        const recentTimestamp = localStorage.getItem('recent_course_timestamp');
-        
-        if (recentCourseId && recentCourseProgress && recentTimestamp) {
-          const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
-          const hoursAgo = timeDiff / (1000 * 60 * 60);
+        // First, try to get courses from user_courses table
+        const { data: enrolledData, error: enrolledError } = await supabase
+          .from('user_courses')
+          .select('course_id, progress, completed_lessons, last_accessed')
+          .eq('user_id', user.id)
+          .order('last_accessed', { ascending: false });
+
+        if (!enrolledError && enrolledData) {
+          enrolledCourses = enrolledData;
+          console.log('✅ Found enrolled courses in database:', enrolledCourses);
+        } else {
+          console.log('Database query failed, trying localStorage fallback...');
           
-          if (hoursAgo < 24) { // Within last 24 hours
-            // Create a mock enrolled course from recent activity
-            enrolledCourses = [{
-              course_id: recentCourseId,
-              progress: parseInt(recentCourseProgress) || 0,
-              completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2), // Estimate based on progress
-              last_accessed: recentTimestamp
-            }];
-            console.log('Found recent course activity in localStorage:', enrolledCourses);
+          // Fallback to localStorage
+          try {
+            const recentCourseId = localStorage.getItem('recent_course_id');
+            const recentCourseProgress = localStorage.getItem('recent_course_progress');
+            const recentTimestamp = localStorage.getItem('recent_course_timestamp');
+            
+            if (recentCourseId && recentCourseProgress && recentTimestamp) {
+              const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
+              const hoursAgo = timeDiff / (1000 * 60 * 60);
+              
+              if (hoursAgo < 24) { // Within last 24 hours
+                enrolledCourses = [{
+                  course_id: recentCourseId,
+                  progress: parseInt(recentCourseProgress) || 0,
+                  completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+                  last_accessed: recentTimestamp
+                }];
+                console.log('✅ Found recent course activity in localStorage:', enrolledCourses);
+              }
+            }
+          } catch (localStorageError) {
+            console.log('Could not check localStorage for recent courses');
           }
         }
-      } catch (localStorageError) {
-        console.log('Could not check localStorage for recent courses');
+      } catch (error) {
+        console.log('Database query error, using localStorage fallback');
+        // Use localStorage fallback
+        try {
+          const recentCourseId = localStorage.getItem('recent_course_id');
+          const recentCourseProgress = localStorage.getItem('recent_course_progress');
+          const recentTimestamp = localStorage.getItem('recent_course_timestamp');
+          
+          if (recentCourseId && recentCourseProgress && recentTimestamp) {
+            const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
+            const hoursAgo = timeDiff / (1000 * 60 * 60);
+            
+            if (hoursAgo < 24) {
+              enrolledCourses = [{
+                course_id: recentCourseId,
+                progress: parseInt(recentCourseProgress) || 0,
+                completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+                last_accessed: recentTimestamp
+              }];
+              console.log('✅ Using localStorage fallback for course data');
+            }
+          }
+        } catch (localStorageError) {
+          console.log('Could not use localStorage fallback');
+        }
       }
-
-      // Skip database queries since tables don't exist yet
-      console.log('Skipping database queries - tables not available yet');
 
       // Set current course (most recently accessed)
       if (enrolledCourses && enrolledCourses.length > 0) {

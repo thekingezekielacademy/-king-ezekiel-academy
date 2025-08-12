@@ -39,7 +39,33 @@ const LessonPlayer: React.FC = () => {
           }
         }
 
-        // Store course viewing activity in localStorage for Dashboard detection
+        // Try database operations first, then fall back to localStorage
+        if (user?.id) {
+          try {
+            // Try to auto-enroll user in course
+            const { error: enrollError } = await supabase
+              .from('user_courses')
+              .upsert({
+                user_id: user.id,
+                course_id: id,
+                progress: 0,
+                completed_lessons: 0,
+                last_accessed: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,course_id'
+              });
+
+            if (!enrollError) {
+              console.log('✅ User auto-enrolled in course via database');
+            } else {
+              console.log('Database enrollment failed, using localStorage fallback');
+            }
+          } catch (error) {
+            console.log('Database operation failed, using localStorage fallback');
+          }
+        }
+
+        // Always store in localStorage as backup
         try {
           localStorage.setItem('recent_course_id', id);
           localStorage.setItem('recent_course_progress', '0'); // Start at 0%
@@ -48,9 +74,6 @@ const LessonPlayer: React.FC = () => {
         } catch (localStorageError) {
           console.log('Could not store course activity in localStorage');
         }
-
-        // Skip database queries since tables don't exist yet
-        console.log('Skipping database queries - tables not available yet');
         
         // Fetch course with all videos
         const { data: courseData, error: courseError } = await supabase
@@ -130,8 +153,48 @@ const LessonPlayer: React.FC = () => {
     if (!user?.id || !id || !lessonId) return;
     
     try {
-      // Skip database tracking since tables don't exist yet
-      console.log('Skipping database tracking - tables not available yet');
+      // Try database operations first, then fall back to localStorage
+      if (user?.id) {
+        try {
+          // Mark lesson as completed in user_lesson_progress
+          const { error: progressError } = await supabase
+            .from('user_lesson_progress')
+            .upsert({
+              user_id: user.id,
+              course_id: id,
+              lesson_id: lessonId,
+              is_completed: true,
+              completed_at: new Date().toISOString()
+            }, {
+              onConflict: 'user_id,course_id,lesson_id'
+            });
+
+          if (!progressError) {
+            console.log('✅ Lesson completion tracked in database');
+          } else {
+            console.log('Database tracking failed, using localStorage fallback');
+          }
+
+          // Try to update XP and streak
+          try {
+            const { error: xpError } = await supabase.rpc('update_user_xp_and_streak', {
+              user_id: user.id,
+              xp_to_add: 50, // +50 XP for completing a lesson
+              activity_type: 'lesson_completion'
+            });
+
+            if (!xpError) {
+              console.log('✅ XP and streak updated in database');
+            } else {
+              console.log('XP update failed (function might not exist yet)');
+            }
+          } catch (xpError) {
+            console.log('XP update function not available yet');
+          }
+        } catch (error) {
+          console.log('Database operations failed, using localStorage fallback');
+        }
+      }
       
       // Update local state to show lesson as completed
       setCompletedLessons(prev => {
@@ -140,7 +203,7 @@ const LessonPlayer: React.FC = () => {
         return newSet;
       });
 
-      // Update localStorage progress for Dashboard detection
+      // Always update localStorage as backup
       try {
         const currentProgress = completedLessons.size + 1; // +1 for this lesson
         const totalLessons = course?.course_videos?.length || 1;
@@ -152,9 +215,6 @@ const LessonPlayer: React.FC = () => {
       } catch (localStorageError) {
         console.log('Could not update localStorage progress');
       }
-      
-      // Skip XP updates since function doesn't exist yet
-      console.log('Skipping XP updates - function not available yet');
 
     } catch (error) {
       console.error('Error in lesson completion tracking:', error);
