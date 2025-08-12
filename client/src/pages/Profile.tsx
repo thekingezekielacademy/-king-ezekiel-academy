@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { FaEdit, FaEnvelope, FaUser, FaImage, FaKey, FaSave, FaTimes } from 'react-icons/fa';
+import { FaEdit, FaEnvelope, FaUser, FaImage, FaKey, FaSave, FaTimes, FaCreditCard, FaHistory } from 'react-icons/fa';
 
 declare global {
   interface Window {
@@ -21,6 +21,13 @@ const Profile: React.FC = () => {
   const [cancelReason, setCancelReason] = useState<string>('');
   const [cancelOther, setCancelOther] = useState<string>('');
   const [cancelUnderstand, setCancelUnderstand] = useState<boolean>(false);
+  // Real subscription data from database
+  const [subscription, setSubscription] = useState<any>(null);
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [billingLoading, setBillingLoading] = useState(true);
+  
+  // Legacy localStorage fallback (will be removed)
   const [subActive, setSubActive] = useState<boolean>(() => {
     try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
   });
@@ -72,6 +79,64 @@ const Profile: React.FC = () => {
     s.onerror = () => setPaystackError('Failed to load Paystack script');
     document.body.appendChild(s);
   }, [PAYSTACK_PUBLIC_KEY]);
+
+  // Fetch subscription data when component mounts
+  useEffect(() => {
+    if (user?.id) {
+      fetchSubscriptionData();
+    }
+  }, [user?.id]);
+
+  // Fetch real subscription data from database
+  const fetchSubscriptionData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setSubscriptionLoading(true);
+      setBillingLoading(true);
+      
+      // Fetch active subscription
+      const { data: subData, error: subError } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!subError && subData) {
+        setSubscription(subData);
+        console.log('✅ Found active subscription:', subData);
+      } else {
+        console.log('No active subscription found');
+        setSubscription(null);
+      }
+      
+      // Fetch billing history
+      const { data: billingData, error: billingError } = await supabase
+        .from('subscription_payments')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (!billingError && billingData) {
+        setBillingHistory(billingData);
+        console.log('✅ Found billing history:', billingData);
+      } else {
+        console.log('No billing history found');
+        setBillingHistory([]);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching subscription data:', error);
+      setSubscription(null);
+      setBillingHistory([]);
+    } finally {
+      setSubscriptionLoading(false);
+      setBillingLoading(false);
+    }
+  };
 
   const createReference = () => `KEA-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
@@ -133,13 +198,13 @@ const Profile: React.FC = () => {
         ref,
         amount: 250000, // Amount in kobo (₦2,500 = 250,000 kobo)
         currency: 'NGN',
-        callback: function(response: any) {
+        callback: async function(response: any) {
           console.log('Paystack payment successful:', response);
           
           // Verify the payment was successful
           if (response.status === 'success') {
             try {
-              // Store subscription data locally
+              // Store subscription data locally as fallback
               localStorage.setItem('subscription_active', 'true');
               localStorage.setItem('subscription_ref', response.reference || ref);
               localStorage.setItem('subscription_amount', '2500');
@@ -158,6 +223,58 @@ const Profile: React.FC = () => {
               setShowManageSubscription(false);
               
               setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
+              
+              // Save to database
+              if (user?.id) {
+                try {
+                  // Save subscription record
+                  const { error: subError } = await supabase
+                    .from('user_subscriptions')
+                    .insert({
+                      user_id: user.id,
+                      paystack_subscription_id: response.reference || ref,
+                      paystack_customer_code: user.email,
+                      plan_name: 'Monthly Membership',
+                      status: 'active',
+                      amount: 250000, // ₦2,500 in kobo
+                      currency: 'NGN',
+                      start_date: new Date().toISOString(),
+                      next_payment_date: next.toISOString(),
+                    });
+                  
+                  if (subError) {
+                    console.error('Error saving subscription:', subError);
+                  } else {
+                    console.log('✅ Subscription saved to database');
+                  }
+                  
+                  // Save payment record
+                  const { error: paymentError } = await supabase
+                    .from('subscription_payments')
+                    .insert({
+                      user_id: user.id,
+                      paystack_transaction_id: response.reference || ref,
+                      paystack_reference: response.reference || ref,
+                      amount: 250000, // ₦2,500 in kobo
+                      currency: 'NGN',
+                      status: 'success',
+                      payment_method: 'card',
+                      paid_at: new Date().toISOString(),
+                    });
+                  
+                  if (paymentError) {
+                    console.error('Error saving payment:', paymentError);
+                  } else {
+                    console.log('✅ Payment saved to database');
+                  }
+                  
+                  // Refresh subscription data
+                  fetchSubscriptionData();
+                  
+                } catch (error) {
+                  console.error('Error saving to database:', error);
+                }
+              }
               
               // Send verification to your backend
               verifyPaymentOnServer(response.reference, user.id);
@@ -436,64 +553,107 @@ const Profile: React.FC = () => {
           {/* Subscription */}
           <div className="bg-white border rounded-2xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Subscription</h2>
-            <div className="space-y-2 text-sm text-gray-700">
-              <div className="flex items-center justify-between">
-                <span>Plan</span>
-                <span className="font-medium text-primary-700">Membership (₦2,500 / month)</span>
+            {subscriptionLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                <span className="ml-2 text-gray-600">Loading...</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span>Status</span>
-                {subActive ? (
+            ) : subscription ? (
+              <div className="space-y-2 text-sm text-gray-700">
+                <div className="flex items-center justify-between">
+                  <span>Plan</span>
+                  <span className="font-medium text-primary-700">{subscription.plan_name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Status</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">Inactive</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Amount</span>
+                  <span className="font-medium text-primary-700">₦{(subscription.amount / 100).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Started</span>
+                  <span>{new Date(subscription.start_date).toLocaleDateString()}</span>
+                </div>
+                {subscription.next_payment_date && (
+                  <div className="flex items-center justify-between">
+                    <span>Next Payment</span>
+                    <span>{new Date(subscription.next_payment_date).toLocaleDateString()}</span>
+                  </div>
                 )}
               </div>
-              <div className="flex items-center justify-between">
-                <span>Renews</span>
-                <span>{subActive ? (subNextRenewal || 'Next month') : '—'}</span>
-              </div>
-              {subRef && (
+            ) : (
+              <div className="space-y-2 text-sm text-gray-700">
                 <div className="flex items-center justify-between">
-                  <span>Reference</span>
-                  <span className="text-xs text-gray-600">{subRef}</span>
+                  <span>Plan</span>
+                  <span className="font-medium text-gray-500">No Active Plan</span>
                 </div>
-              )}
-            </div>
+                <div className="flex items-center justify-between">
+                  <span>Status</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">Inactive</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Renews</span>
+                  <span>—</span>
+                </div>
+              </div>
+            )}
             <button onClick={() => setShowManageSubscription(true)} className={`mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-              subActive 
+              subscription 
                 ? 'border rounded-lg hover:bg-gray-50' 
                 : 'bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
             }`}>
-              {subActive ? 'Manage Subscription' : 'Subscribe here'}
+              {subscription ? 'Manage Subscription' : 'Subscribe here'}
             </button>
             <button
-              onClick={() => {
-                try {
-                  setSubActive(localStorage.getItem('subscription_active') === 'true');
-                  setSubRef(localStorage.getItem('subscription_ref'));
-                  setSubNextRenewal(localStorage.getItem('subscription_next_renewal'));
-                  setMessage('Subscription status refreshed');
-                } catch {}
-              }}
+              onClick={fetchSubscriptionData}
               className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50"
             >
-              Refresh status
+              <FaCreditCard className="h-4 w-4" />
+              Refresh Status
             </button>
           </div>
 
           {/* Billing History */}
           <div className="bg-white border rounded-2xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Billing History</h2>
-            <div className="space-y-3 text-sm">
-              {[{date:'2025-08-01', amount:2500, status:'Paid'}, {date:'2025-07-01', amount:2500, status:'Paid'}, {date:'2025-06-01', amount:2500, status:'Paid'}].map((i) => (
-                <div key={i.date} className="flex items-center justify-between">
-                  <div className="text-gray-700">{i.date}</div>
-                  <div className="text-gray-800 font-medium">₦{i.amount.toLocaleString()}</div>
-                  <div className="text-green-600">{i.status}</div>
-                </div>
-              ))}
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FaHistory className="h-5 w-5" />
+              Billing History
+            </h2>
+            {billingLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                <span className="ml-2 text-gray-600">Loading billing history...</span>
+              </div>
+            ) : billingHistory.length > 0 ? (
+              <div className="space-y-3 text-sm">
+                {billingHistory.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-700">
+                      {new Date(payment.created_at).toLocaleDateString()}
+                    </div>
+                    <div className="text-gray-800 font-medium">
+                      ₦{(payment.amount / 100).toLocaleString()}
+                    </div>
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      payment.status === 'success' ? 'bg-green-100 text-green-700' :
+                      payment.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      payment.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <FaHistory className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 mb-2">No billing history yet</p>
+                <p className="text-sm text-gray-400">Your payment history will appear here once you make your first subscription payment.</p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white border rounded-2xl shadow-sm p-6">
