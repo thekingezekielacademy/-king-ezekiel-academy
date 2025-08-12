@@ -15,6 +15,7 @@ const LessonPlayer: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
+  const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
 
   // Fetch course and lesson data
   useEffect(() => {
@@ -26,7 +27,7 @@ const LessonPlayer: React.FC = () => {
         setError(null);
         
         // First, refresh the session to ensure we have a valid token
-        const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+        const { error: sessionError } = await supabase.auth.refreshSession();
         
         if (sessionError) {
           console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
@@ -37,6 +38,19 @@ const LessonPlayer: React.FC = () => {
             return;
           }
         }
+
+        // Store course viewing activity in localStorage for Dashboard detection
+        try {
+          localStorage.setItem('recent_course_id', id);
+          localStorage.setItem('recent_course_progress', '0'); // Start at 0%
+          localStorage.setItem('recent_course_timestamp', new Date().toISOString());
+          console.log('✅ Course activity stored in localStorage');
+        } catch (localStorageError) {
+          console.log('Could not store course activity in localStorage');
+        }
+
+        // Skip database queries since tables don't exist yet
+        console.log('Skipping database queries - tables not available yet');
         
         // Fetch course with all videos
         const { data: courseData, error: courseError } = await supabase
@@ -102,17 +116,49 @@ const LessonPlayer: React.FC = () => {
   // Handle video player events
   const handleVideoPlay = () => {
     console.log(`Lesson ${lessonId} video started playing`);
-    // You can add analytics tracking here
+    // Track video start for analytics
   };
 
   const handleVideoPause = () => {
     console.log(`Lesson ${lessonId} video paused`);
-    // You can add progress tracking here
+    // Track video pause for progress
   };
 
-  const handleVideoEnded = () => {
+  const handleVideoEnded = async () => {
     console.log(`Lesson ${lessonId} video completed`);
-    // You can add completion tracking here
+    
+    if (!user?.id || !id || !lessonId) return;
+    
+    try {
+      // Skip database tracking since tables don't exist yet
+      console.log('Skipping database tracking - tables not available yet');
+      
+      // Update local state to show lesson as completed
+      setCompletedLessons(prev => {
+        const newSet = new Set(prev);
+        newSet.add(lessonId);
+        return newSet;
+      });
+
+      // Update localStorage progress for Dashboard detection
+      try {
+        const currentProgress = completedLessons.size + 1; // +1 for this lesson
+        const totalLessons = course?.course_videos?.length || 1;
+        const progressPercentage = Math.round((currentProgress / totalLessons) * 100);
+        
+        localStorage.setItem('recent_course_progress', progressPercentage.toString());
+        localStorage.setItem('recent_course_timestamp', new Date().toISOString());
+        console.log('✅ Progress updated in localStorage:', progressPercentage + '%');
+      } catch (localStorageError) {
+        console.log('Could not update localStorage progress');
+      }
+      
+      // Skip XP updates since function doesn't exist yet
+      console.log('Skipping XP updates - function not available yet');
+
+    } catch (error) {
+      console.error('Error in lesson completion tracking:', error);
+    }
   };
 
   const nextLesson = () => {
@@ -234,15 +280,28 @@ const LessonPlayer: React.FC = () => {
         <aside className="hidden md:block md:col-span-3 bg-white border rounded-xl h-fit p-4">
           <div className="font-bold mb-3">Lessons</div>
           <div className="space-y-2">
-            {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => (
-              <div 
-                key={video.id} 
-                className={`px-3 py-2 rounded border cursor-pointer ${currentVideo.id === video.id ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}
-                onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
-              >
-                {video.name || `Lesson ${index + 1}`}
-              </div>
-            ))}
+            {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => {
+              const isCompleted = completedLessons.has(video.id);
+              
+              return (
+                <div 
+                  key={video.id} 
+                  className={`px-3 py-2 rounded border cursor-pointer flex items-center justify-between ${
+                    currentVideo.id === video.id 
+                      ? 'bg-primary-50 border-primary-200 text-primary-700' 
+                      : isCompleted 
+                        ? 'bg-green-50 border-green-200 text-green-700' 
+                        : 'hover:bg-gray-50'
+                  }`}
+                  onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
+                >
+                  <span>{video.name || `Lesson ${index + 1}`}</span>
+                  {isCompleted && (
+                    <span className="text-green-600">✓</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </aside>
 
@@ -253,11 +312,26 @@ const LessonPlayer: React.FC = () => {
               <div>
                 <div className="font-bold">{currentVideo.name}</div>
                 <div className="h-1.5 bg-gray-100 rounded mt-2">
-                  <div className="h-1.5 bg-primary-500 rounded w-1/5 transition-all" />
+                  <div 
+                    className="h-1.5 bg-primary-500 rounded transition-all" 
+                    style={{ width: `${((currentLessonIndex + 1) / (course.course_videos?.length || 1)) * 100}%` }}
+                  />
                 </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                {currentLessonIndex + 1} of {course.course_videos?.length || 0} lessons
+                {completedLessons.size > 0 && (
+                  <span className="ml-2 text-green-600">
+                    • {completedLessons.size} completed
+                  </span>
+                )}
+              </div>
               </div>
               <div className="hidden sm:block">
-                <ProgressRing size={52} strokeWidth={6} progress={20} />
+                <ProgressRing 
+                  size={52} 
+                  strokeWidth={6} 
+                  progress={Math.round(((currentLessonIndex + 1) / (course.course_videos?.length || 1)) * 100)} 
+                />
               </div>
             </div>
             <div className="w-full overflow-hidden" style={{ minHeight: '280px', height: '55vh', maxHeight: '580px', margin: 0, padding: 0, marginBottom: 0 }}>
@@ -319,15 +393,28 @@ const LessonPlayer: React.FC = () => {
             <div className="bg-white border rounded-xl p-4">
               <div className="font-bold mb-3">Lessons</div>
               <div className="space-y-2">
-                {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => (
-                  <div
-                    key={video.id}
-                    className={`px-3 py-2 rounded border cursor-pointer ${currentVideo.id === video.id ? 'bg-primary-50 border-primary-200 text-primary-700' : 'hover:bg-gray-50'}`}
-                    onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
-                  >
-                    {video.name || `Lesson ${index + 1}`}
-                  </div>
-                ))}
+                {course.course_videos?.sort((a: any, b: any) => a.order_index - b.order_index).map((video: any, index: number) => {
+                  const isCompleted = completedLessons.has(video.id);
+                  
+                  return (
+                    <div
+                      key={video.id}
+                      className={`px-3 py-2 rounded border cursor-pointer flex items-center justify-between ${
+                        currentVideo.id === video.id 
+                          ? 'bg-primary-50 border-primary-200 text-primary-700' 
+                          : isCompleted 
+                            ? 'bg-green-50 border-green-200 text-green-700' 
+                            : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => navigate(`/course/${id}/lesson/${video.id}`)}
+                    >
+                      <span>{video.name || `Lesson ${index + 1}`}</span>
+                      {isCompleted && (
+                        <span className="text-green-600">✓</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

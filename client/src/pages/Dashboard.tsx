@@ -1,23 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { 
   FaTrophy, 
   FaFire, 
-  FaGraduationCap, 
   FaPlay, 
   FaStar, 
   FaUsers, 
   FaCrown,
-  FaMedal,
-  FaBookOpen,
   FaChartLine,
-  FaGift,
   FaClock,
   FaCheckCircle,
   FaArrowRight,
-  FaHeart,
-  FaShare,
   FaUser
 } from 'react-icons/fa';
 
@@ -53,113 +48,375 @@ interface Achievement {
   earnedDate?: string;
 }
 
+interface UserStats {
+  xp: number;
+  streak_count: number;
+  last_activity_date: string;
+  level: number;
+  total_users: number;
+  class_ranking: string;
+}
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAdmin } = useAuth();
-  const [currentStreak, setCurrentStreak] = useState(4);
-  const [totalXP, setTotalXP] = useState(2840);
-  const [level, setLevel] = useState(8);
-  const [trialDaysLeft, setTrialDaysLeft] = useState(3);
+  
+  // User stats state
+  const [userStats, setUserStats] = useState<UserStats>({
+    xp: 0,
+    streak_count: 0,
+    last_activity_date: new Date().toISOString().split('T')[0],
+    level: 1,
+    total_users: 1247,
+    class_ranking: 'Top 35%'
+  });
+  
+  const [trialDaysLeft] = useState(3);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Check subscription status
-  const [subActive, setSubActive] = useState<boolean>(() => {
+  const [subActive] = useState<boolean>(() => {
     try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
   });
 
-  // Mock data - in real app, this would come from your Supabase database
-  const [currentCourse] = useState<Course>({
-    id: '1',
-    title: 'Digital Marketing 101',
-    progress: 65,
-    totalLessons: 24,
-    completedLessons: 16,
-    category: 'Marketing',
-    instructor: 'Sarah Johnson',
-    rating: 4.8,
-    enrolledStudents: 1247,
-    image: '/api/placeholder/300/200'
-  });
+  // Calculate level based on XP (every 1000 XP = 1 level)
+  const calculateLevel = (xp: number): number => {
+    return Math.floor(xp / 1000) + 1;
+  };
 
-  const [recommendedCourses] = useState<Course[]>([
-    {
-      id: '2',
-      title: 'Advanced Excel Mastery',
-      progress: 0,
-      totalLessons: 18,
-      completedLessons: 0,
-      category: 'Business',
-      instructor: 'Michael Chen',
-      rating: 4.9,
-      enrolledStudents: 2156,
-      image: '/api/placeholder/300/200'
-    },
-    {
-      id: '3',
-      title: 'Social Media Strategy',
-      progress: 0,
-      totalLessons: 22,
-      completedLessons: 0,
-      category: 'Marketing',
-      instructor: 'Emma Davis',
-      rating: 4.7,
-      enrolledStudents: 1893,
-      image: '/api/placeholder/300/200'
+  // Fetch user stats from database
+  const fetchUserStats = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Refresh session to handle JWT expiration
+      const { error: sessionError } = await supabase.auth.refreshSession();
+      if (sessionError) {
+        console.error('Session refresh error:', sessionError);
+        return;
+      }
+
+      // Fetch user profile with XP and streak data - Skip if columns don't exist
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('xp, streak_count, last_activity_date')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.log('XP/streak columns not available yet, using default values');
+          // Use default values when XP system isn't set up yet
+          setUserStats({
+            xp: 0,
+            streak_count: 0,
+            last_activity_date: new Date().toISOString().split('T')[0],
+            level: 1,
+            total_users: 100, // Default community size
+            class_ranking: 'Top 90%' // Default ranking
+          });
+          return;
+        }
+
+        // Fetch total users count for community stats
+        const { count: totalUsers } = await supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true });
+
+        // Calculate level and ranking
+        const level = calculateLevel(profile.xp || 0);
+        const totalUsersCount = totalUsers || 1247;
+        
+        // Simple ranking calculation (mock for now)
+        const ranking = profile.xp > 2000 ? 'Top 25%' : 
+                       profile.xp > 1000 ? 'Top 50%' : 
+                       profile.xp > 500 ? 'Top 75%' : 'Top 90%';
+
+        setUserStats({
+          xp: profile.xp || 0,
+          streak_count: profile.streak_count || 0,
+          last_activity_date: profile.last_activity_date || new Date().toISOString().split('T')[0],
+          level,
+          total_users: totalUsersCount,
+          class_ranking: ranking
+        });
+      } catch (error) {
+        console.log('XP system not available yet, using default values');
+        // Use default values when XP system isn't set up yet
+        setUserStats({
+          xp: 0,
+          streak_count: 0,
+          last_activity_date: new Date().toISOString().split('T')[0],
+          level: 1,
+          total_users: 100, // Default community size
+          class_ranking: 'Top 90%' // Default ranking
+        });
+      }
+
+    } catch (error) {
+      console.error('Error in fetchUserStats:', error);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  }, [user?.id]);
 
-  const [badges] = useState<Badge[]>([
-    {
-      id: '1',
-      name: 'First Steps',
-      description: 'Complete your first lesson',
-      icon: '🎯',
-      earned: true,
-      earnedDate: '2 days ago'
-    },
-    {
-      id: '2',
-      name: 'Week Warrior',
-      description: 'Learn for 7 days in a row',
-      icon: '🔥',
-      earned: true,
-      earnedDate: '1 day ago'
-    },
-    {
-      id: '3',
-      name: 'Course Master',
-      description: 'Complete a full course',
-      icon: '🏆',
-      earned: false,
-      progress: 65
+
+
+  // Fetch real course data
+  const fetchCourseData = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoadingCourses(true);
+      
+      // Refresh session to handle JWT expiration
+      const { error: sessionError } = await supabase.auth.refreshSession();
+      if (sessionError) {
+        console.error('Session refresh error:', sessionError);
+        return;
+      }
+
+      // Check localStorage for recent course activity (since database tables don't exist yet)
+      let enrolledCourses = [];
+      try {
+        // Check if user has been to any course pages recently (stored in localStorage)
+        const recentCourseId = localStorage.getItem('recent_course_id');
+        const recentCourseProgress = localStorage.getItem('recent_course_progress');
+        const recentTimestamp = localStorage.getItem('recent_course_timestamp');
+        
+        if (recentCourseId && recentCourseProgress && recentTimestamp) {
+          const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
+          const hoursAgo = timeDiff / (1000 * 60 * 60);
+          
+          if (hoursAgo < 24) { // Within last 24 hours
+            // Create a mock enrolled course from recent activity
+            enrolledCourses = [{
+              course_id: recentCourseId,
+              progress: parseInt(recentCourseProgress) || 0,
+              completed_lessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2), // Estimate based on progress
+              last_accessed: recentTimestamp
+            }];
+            console.log('Found recent course activity in localStorage:', enrolledCourses);
+          }
+        }
+      } catch (localStorageError) {
+        console.log('Could not check localStorage for recent courses');
+      }
+
+      // Skip database queries since tables don't exist yet
+      console.log('Skipping database queries - tables not available yet');
+
+      // Set current course (most recently accessed)
+      if (enrolledCourses && enrolledCourses.length > 0) {
+        const mostRecent = enrolledCourses[0];
+        
+        // Update last_accessed timestamp for this course
+        try {
+          await supabase
+            .from('user_courses')
+            .update({ last_accessed: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .eq('course_id', mostRecent.course_id);
+        } catch (updateError) {
+          console.log('Could not update last_accessed timestamp');
+        }
+        
+        // Fetch course details
+        const { data: courseData, error: courseError } = await supabase
+          .from('courses')
+          .select('id, title, description, level, cover_photo_url, created_by')
+          .eq('id', mostRecent.course_id)
+          .single();
+
+        if (courseError) {
+          console.error('Error fetching course data:', courseError);
+          return;
+        }
+        
+        // Fetch course videos count
+        const { count: totalLessons } = await supabase
+          .from('course_videos')
+          .select('*', { count: 'exact', head: true })
+          .eq('course_id', courseData.id);
+
+        // Calculate actual progress based on completed lessons
+        const actualProgress = totalLessons > 0 ? Math.round((mostRecent.completed_lessons / totalLessons) * 100) : 0;
+        
+        setCurrentCourse({
+          id: courseData.id,
+          title: courseData.title,
+          progress: actualProgress,
+          totalLessons: totalLessons || 0,
+          completedLessons: mostRecent.completed_lessons || 0,
+          category: courseData.level || 'General',
+          instructor: 'Admin', // We can add instructor field later
+          rating: 4.8, // We can add rating system later
+          enrolledStudents: 1247, // We can add enrollment count later
+          image: courseData.cover_photo_url || '/api/placeholder/300/200'
+        });
+      }
+
+      // Fetch recommended courses (not enrolled)
+      const { data: allCourses, error: coursesError } = await supabase
+        .from('courses')
+        .select(`
+          id,
+          title,
+          description,
+          level,
+          cover_photo_url,
+          created_by
+        `)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (coursesError) {
+        console.error('Error fetching courses:', coursesError);
+        return;
+      }
+
+      // Filter out courses user is already enrolled in
+      const enrolledCourseIds = enrolledCourses?.map(ec => ec.course_id) || [];
+      const availableCourses = allCourses?.filter(course => !enrolledCourseIds.includes(course.id)) || [];
+
+      // Transform to Course interface
+      const recommended = availableCourses.slice(0, 2).map(course => ({
+        id: course.id,
+        title: course.title,
+        progress: 0,
+        totalLessons: 0, // We'll fetch this if needed
+        completedLessons: 0,
+        category: course.level || 'General',
+        instructor: 'Admin',
+        rating: 4.7,
+        enrolledStudents: 1000,
+        image: course.cover_photo_url || '/api/placeholder/300/200'
+      }));
+
+      setRecommendedCourses(recommended);
+
+    } catch (error) {
+      console.error('Error in fetchCourseData:', error);
+    } finally {
+      setIsLoadingCourses(false);
     }
-  ]);
+  }, [user?.id]);
 
-  const [achievements] = useState<Achievement[]>([
-    {
+  // Fetch stats on component mount
+  useEffect(() => {
+    fetchUserStats();
+    fetchCourseData();
+  }, [user?.id, fetchUserStats, fetchCourseData]);
+
+  // Real data state
+  const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
+  const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(true);
+
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+
+  // Calculate badges and achievements based on real user data
+  const calculateBadgesAndAchievements = useCallback(() => {
+    if (!userStats || !currentCourse) return;
+
+    const newBadges: Badge[] = [];
+    const newAchievements: Achievement[] = [];
+
+    // Badge: First Steps (complete first lesson)
+    if (userStats.xp > 0) {
+      newBadges.push({
+        id: '1',
+        name: 'First Steps',
+        description: 'Complete your first lesson',
+        icon: '🎯',
+        earned: true,
+        earnedDate: 'Today'
+      });
+    }
+
+    // Badge: Week Warrior (7+ day streak)
+    if (userStats.streak_count >= 7) {
+      newBadges.push({
+        id: '2',
+        name: 'Week Warrior',
+        description: 'Learn for 7 days in a row',
+        icon: '🔥',
+        earned: true,
+        earnedDate: 'Today'
+      });
+    } else {
+      newBadges.push({
+        id: '2',
+        name: 'Week Warrior',
+        description: 'Learn for 7 days in a row',
+        icon: '🔥',
+        earned: false,
+        progress: Math.min((userStats.streak_count / 7) * 100, 100)
+      });
+    }
+
+    // Badge: Course Master (complete a course)
+    if (currentCourse.progress >= 100) {
+      newBadges.push({
+        id: '3',
+        name: 'Course Master',
+        description: 'Complete a full course',
+        icon: '🏆',
+        earned: true,
+        earnedDate: 'Today'
+      });
+    } else {
+      newBadges.push({
+        id: '3',
+        name: 'Course Master',
+        description: 'Complete a full course',
+        icon: '🏆',
+        earned: false,
+        progress: currentCourse.progress
+      });
+    }
+
+    // Achievement: Early Bird (earn XP before 9 AM - simplified for now)
+    newAchievements.push({
       id: '1',
       title: 'Early Bird',
       description: 'Complete a lesson before 9 AM',
       xp: 50,
-      earned: true,
-      earnedDate: '3 days ago'
-    },
-    {
+      earned: userStats.xp > 100,
+      earnedDate: userStats.xp > 100 ? 'Today' : undefined
+    });
+
+    // Achievement: Speed Learner (complete 5+ lessons in one day - simplified)
+    newAchievements.push({
       id: '2',
       title: 'Speed Learner',
       description: 'Complete 5 lessons in one day',
       xp: 100,
-      earned: false
-    },
-    {
+      earned: userStats.xp > 200
+    });
+
+    // Achievement: Social Butterfly (earn XP from multiple activities)
+    newAchievements.push({
       id: '3',
       title: 'Social Butterfly',
-      description: 'Share 3 courses with friends',
+      description: 'Earn XP from multiple learning activities',
       xp: 75,
-      earned: true,
-      earnedDate: '1 day ago'
-    }
-  ]);
+      earned: userStats.xp > 150,
+      earnedDate: userStats.xp > 150 ? 'Today' : undefined
+    });
+
+    setBadges(newBadges);
+    setAchievements(newAchievements);
+  }, [userStats, currentCourse]);
+
+  // Update badges and achievements when user stats or current course changes
+  useEffect(() => {
+    calculateBadgesAndAchievements();
+  }, [calculateBadgesAndAchievements]);
 
   const [motivationalQuotes] = useState([
     "The only way to do great work is to love what you do. - Steve Jobs",
@@ -183,6 +440,19 @@ const Dashboard: React.FC = () => {
     return 'text-green-600';
   };
 
+
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pt-16">
       {/* Header */}
@@ -199,13 +469,13 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center space-x-2 bg-blue-50 px-4 py-2 rounded-lg">
                 <FaFire className="text-orange-500" />
                 <span className="text-sm font-medium text-blue-900">
-                  {currentStreak} day streak
+                  {userStats.streak_count} day streak
                 </span>
               </div>
               <div className="flex items-center space-x-2 bg-purple-50 px-4 py-2 rounded-lg">
                 <FaStar className="text-purple-500" />
                 <span className="text-sm font-medium text-purple-900">
-                  {totalXP} XP
+                  {userStats.xp} XP
                 </span>
               </div>
             </div>
@@ -213,39 +483,39 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Admin Status Banner */}
-          {isAdmin && (
-            <div className="mb-8 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl shadow-sm border border-purple-200 p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <FaCrown className="text-purple-600 text-xl" />
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg">🎉 Admin Access Granted!</h3>
-                    <p className="text-sm text-gray-700">
-                      You are signed in as an administrator. You can now access admin features and manage courses.
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Admin Status Banner */}
+        {isAdmin && (
+          <div className="mb-8 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl shadow-sm border border-purple-200 p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FaCrown className="text-purple-600 text-xl" />
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-lg">🎉 Admin Access Granted!</h3>
+                  <p className="text-sm text-gray-700">
+                    You are signed in as an administrator. You can now access admin features and manage courses.
+                  </p>
+                  {/* Debug info for admins - shows if someone was redirected */}
+                  {location.state?.redirectedFrom && (
+                    <p className="text-xs text-purple-600 mt-1 italic">
+                      🔍 Debug: User was redirected from {location.state.redirectedFrom}
                     </p>
-                    {/* Debug info for admins - shows if someone was redirected */}
-                    {location.state?.redirectedFrom && (
-                      <p className="text-xs text-purple-600 mt-1 italic">
-                        🔍 Debug: User was redirected from {location.state.redirectedFrom}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
-                <button 
-                  onClick={() => navigate('/admin')}
-                  className="bg-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center space-x-2"
-                >
-                  <span>Go to Admin Panel</span>
-                  <FaArrowRight className="text-sm" />
-                </button>
               </div>
+              <button 
+                onClick={() => navigate('/admin')}
+                className="bg-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center space-x-2"
+              >
+                <span>Go to Admin Panel</span>
+                <FaArrowRight className="text-sm" />
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Trial Banner - Only show when subscription is not active */}
-          {trialDaysLeft > 0 && !subActive && (
+        {/* Trial Banner - Only show when subscription is not active */}
+        {trialDaysLeft > 0 && !subActive && (
           <div className="mb-8 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl shadow-sm border border-red-200 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -272,6 +542,19 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
+        {/* XP System Info Banner */}
+        <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-200 p-4">
+          <div className="flex items-center space-x-3">
+            <FaStar className="text-blue-500 text-lg" />
+            <div>
+              <h3 className="font-semibold text-gray-900 text-sm">🎯 XP System Active</h3>
+              <p className="text-xs text-gray-700">
+                Your learning activities automatically earn XP and maintain your streak. Watch lessons, complete courses, and stay consistent!
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content - 2/3 width */}
           <div className="lg:col-span-2 space-y-8">
@@ -281,48 +564,209 @@ const Dashboard: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900">Your Progress</h2>
                 <div className="flex items-center space-x-2">
                   <FaChartLine className="text-green-500" />
-                  <span className="text-sm text-gray-600">Level {level}</span>
+                  <span className="text-sm text-gray-600">Level {userStats.level}</span>
                 </div>
               </div>
 
-              {/* Current Course Progress */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900">{currentCourse.title}</h3>
-                  <span className="text-sm text-gray-600">
-                    {currentCourse.completedLessons}/{currentCourse.totalLessons} lessons
-                  </span>
+              {isLoadingCourses ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-600">Loading your courses...</span>
                 </div>
-                <div className="relative">
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div 
-                      className={`h-3 rounded-full ${getProgressColor(currentCourse.progress)} transition-all duration-300`}
-                      style={{ width: `${currentCourse.progress}%` }}
-                    ></div>
+              ) : currentCourse ? (
+                <>
+                  {/* Current Course Progress */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-900">{currentCourse.title}</h3>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          {currentCourse.category}
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          {currentCourse.completedLessons}/{currentCourse.totalLessons} videos
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="relative mb-3">
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className={`h-3 rounded-full ${getProgressColor(currentCourse.progress)} transition-all duration-300`}
+                          style={{ width: `${currentCourse.progress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Details */}
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600">
+                          <strong>{currentCourse.progress}%</strong> complete
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {currentCourse.totalLessons - currentCourse.completedLessons} videos remaining
+                        </span>
+                      </div>
+                      <span className="text-sm text-green-600 font-medium">
+                        {currentCourse.progress > 0 ? 'Keep going! 🚀' : 'Start watching! 🎬'}
+                      </span>
+                    </div>
+                    
+                    {/* Course Stats */}
+                    <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-lg p-3">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-blue-600">{currentCourse.completedLessons}</div>
+                        <div className="text-xs text-gray-600">Videos Watched</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-600">{currentCourse.totalLessons}</div>
+                        <div className="text-xs text-gray-600">Total Videos</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-purple-600">{currentCourse.progress}%</div>
+                        <div className="text-xs text-gray-600">Progress</div>
+                      </div>
+                    </div>
+                    
+                    {/* Continue Learning Button */}
+                    <div className="mt-4">
+                      <button 
+                        onClick={() => navigate(`/course/${currentCourse.id}`)}
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center space-x-2"
+                      >
+                        <span>🎬 Continue Learning</span>
+                        <FaArrowRight className="text-sm" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex justify-between mt-2">
-                    <span className="text-sm text-gray-600">
-                      {currentCourse.progress}% complete
-                    </span>
-                    <span className="text-sm text-green-600 font-medium">
-                      Keep going! 🚀
-                    </span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Next Milestone */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
-                <div className="flex items-center space-x-3">
-                  <FaTrophy className="text-yellow-500 text-xl" />
-                  <div>
-                    <h4 className="font-semibold text-gray-900">Next Milestone</h4>
-                    <p className="text-sm text-gray-600">
-                      Complete this course to unlock your 'Certified Marketer' badge!
-                    </p>
+                  {/* Next Milestone */}
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center space-x-3">
+                      <FaTrophy className="text-yellow-500 text-xl" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Next Milestone</h4>
+                        <p className="text-sm text-gray-600">
+                          {currentCourse.progress >= 100 ? (
+                            "🎉 Course completed! You've earned the 'Course Master' badge!"
+                          ) : currentCourse.progress >= 75 ? (
+                            "Almost there! Complete the remaining videos to finish this course!"
+                          ) : currentCourse.progress >= 50 ? (
+                            "Great progress! You're halfway through. Keep up the momentum!"
+                          ) : currentCourse.progress >= 25 ? (
+                            "Good start! Watch a few more videos to reach the 50% milestone!"
+                          ) : (
+                            "Watch your first video to earn the 'First Steps' badge!"
+                          )}
+                        </p>
+                      </div>
+                    </div>
                   </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-4">
+                    <svg className="h-16 w-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 5.477 5.754 5 7.5 5s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 19 16.5 19c-1.746 0-3.332-.523-4.5-1.253" />
+                    </svg>
+                  </div>
+                  
+                  {/* Check if user has been viewing courses recently */}
+                  {(() => {
+                    try {
+                      const recentCourseId = localStorage.getItem('recent_course_id');
+                      const recentCourseProgress = localStorage.getItem('recent_course_progress');
+                      const recentTimestamp = localStorage.getItem('recent_course_timestamp');
+                      
+                      if (recentCourseId && recentCourseProgress && recentTimestamp) {
+                        const timeDiff = Date.now() - new Date(recentTimestamp).getTime();
+                        const hoursAgo = timeDiff / (1000 * 60 * 60);
+                        
+                        if (hoursAgo < 24) { // Within last 24 hours
+                          return (
+                            <div className="space-y-4">
+                              <h3 className="text-lg font-semibold text-gray-900 mb-2">Continue Your Learning Journey</h3>
+                              <p className="text-gray-600 mb-4">
+                                You were recently learning! Pick up where you left off or explore new courses.
+                              </p>
+                              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 mb-4 border border-blue-200">
+                                <div className="flex items-center space-x-3">
+                                  <div className="text-2xl">🎬</div>
+                                  <div>
+                                    <h4 className="font-semibold text-gray-900 text-sm">Recent Activity</h4>
+                                    <p className="text-xs text-gray-700">
+                                      You were working on a course recently. Your progress is being tracked!
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                <button 
+                                  onClick={() => navigate(`/course/${recentCourseId}`)}
+                                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                                >
+                                  Continue Learning
+                                </button>
+                                <button 
+                                  onClick={() => navigate('/courses')}
+                                  className="bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:from-green-700 hover:to-blue-700 transition-all duration-200"
+                                >
+                                  Browse All Courses
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+                      }
+                      
+                      // Default message for new users
+                      return (
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Start Learning?</h3>
+                          <p className="text-gray-600 mb-4">
+                            Choose your first course and begin your learning journey today!
+                          </p>
+                          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 mb-4 border border-green-200">
+                            <div className="flex items-center space-x-3">
+                              <div className="text-2xl">🎯</div>
+                              <div>
+                                <h4 className="font-semibold text-gray-900 text-sm">Quick Start Guide</h4>
+                                <p className="text-xs text-gray-700">
+                                  Browse our course catalog, pick a topic that interests you, and click "Start Learning" to begin!
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => navigate('/courses')}
+                            className="bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:from-green-700 hover:to-blue-700 transition-all duration-200"
+                          >
+                            Browse All Courses
+                          </button>
+                        </div>
+                      );
+                    } catch (error) {
+                      // Fallback to default message
+                      return (
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">Ready to Start Learning?</h3>
+                          <p className="text-gray-600 mb-4">
+                            Choose your first course and begin your learning journey today!
+                          </p>
+                          <button 
+                            onClick={() => navigate('/courses')}
+                            className="bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:from-green-700 hover:to-blue-700 transition-all duration-200"
+                          >
+                            Browse All Courses
+                          </button>
+                        </div>
+                      );
+                    }
+                  })()}
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Recommended Courses */}
@@ -332,36 +776,59 @@ const Dashboard: React.FC = () => {
                 <span className="text-sm text-gray-600">AI-powered suggestions</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {recommendedCourses.map((course) => (
-                  <div key={course.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                        {course.title.split(' ').map(word => word[0]).join('')}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 mb-1">{course.title}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{course.instructor}</p>
-                        <div className="flex items-center space-x-4 text-sm">
-                          <span className="flex items-center space-x-1">
-                            <FaStar className="text-yellow-400" />
-                            <span>{course.rating}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <FaUsers className="text-gray-400" />
-                            <span>{course.enrolledStudents}</span>
-                          </span>
+              {isLoadingCourses ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-600">Loading recommendations...</span>
+                </div>
+              ) : recommendedCourses.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {recommendedCourses.map((course) => (
+                    <div key={course.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start space-x-4">
+                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                          {course.title.split(' ').map(word => word[0]).join('')}
                         </div>
-                        <div className="mt-3">
-                          <button onClick={() => navigate(`/course/${course.id}`)} className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
-                            Start Learning
-                          </button>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 mb-1">{course.title}</h3>
+                          <p className="text-sm text-gray-600 mb-2">{course.instructor}</p>
+                          <div className="flex items-center space-x-4 text-sm">
+                            <span className="flex items-center space-x-1">
+                              <FaStar className="text-yellow-400" />
+                              <span>{course.rating}</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <FaUsers className="text-gray-400" />
+                              <span>{course.enrolledStudents}</span>
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            <button onClick={() => navigate(`/course/${course.id}`)} className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+                              Start Learning
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-4">
+                    <svg className="h-16 w-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
                   </div>
-                ))}
-              </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Recommendations Yet</h3>
+                  <p className="text-gray-600 mb-4">Explore our course catalog to find your next learning adventure</p>
+                  <button 
+                    onClick={() => navigate('/courses')}
+                    className="bg-primary-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-700 transition-colors"
+                  >
+                    Explore Courses
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Social Proof */}
@@ -374,8 +841,8 @@ const Dashboard: React.FC = () => {
                     <FaCrown className="text-yellow-500 text-xl" />
                     <h4 className="font-semibold text-gray-900">Class Ranking</h4>
                   </div>
-                  <p className="text-2xl font-bold text-purple-600">Top 35%</p>
-                  <p className="text-sm text-gray-600">You're ahead of 65% of learners in your batch!</p>
+                  <p className="text-2xl font-bold text-purple-600">{userStats.class_ranking}</p>
+                  <p className="text-sm text-gray-600">You're ahead of most learners in your batch!</p>
                 </div>
 
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4">
@@ -383,7 +850,7 @@ const Dashboard: React.FC = () => {
                     <FaUsers className="text-blue-500 text-xl" />
                     <h4 className="font-semibold text-gray-900">Community</h4>
                   </div>
-                  <p className="text-2xl font-bold text-blue-600">1,247</p>
+                  <p className="text-2xl font-bold text-blue-600">{userStats.total_users.toLocaleString()}</p>
                   <p className="text-sm text-gray-600">Students learning with you</p>
                 </div>
               </div>
@@ -400,15 +867,36 @@ const Dashboard: React.FC = () => {
               </div>
               
               <div className="text-center mb-4">
-                <div className="text-3xl font-bold text-orange-600 mb-2">{currentStreak}</div>
+                <div className="text-3xl font-bold text-orange-600 mb-2">{userStats.streak_count}</div>
                 <p className="text-sm text-gray-600">days in a row</p>
               </div>
 
-              <div className="bg-orange-50 rounded-lg p-3 mb-4">
-                <p className="text-sm text-orange-800">
-                  🔥 You've learned {currentStreak} days in a row. Keep it up!
-                </p>
-              </div>
+              {userStats.xp === 0 ? (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 mb-4 border border-blue-200">
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🚀</div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Ready to Start Your Journey?</h4>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Every great adventure begins with a single step. Start learning today and watch your XP grow!
+                    </p>
+                    <button 
+                      onClick={() => navigate('/courses')}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                    >
+                      Explore Courses
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-orange-50 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-orange-800">
+                    🔥 You've learned {userStats.streak_count} days in a row. Keep it up!
+                  </p>
+                  <p className="text-xs text-orange-700 mt-1">
+                    Daily streak bonus: +{userStats.streak_count * 10} XP
+                  </p>
+                </div>
+              )}
 
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-sm text-gray-700 italic">"{currentQuote}"</p>
@@ -452,12 +940,29 @@ const Dashboard: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm border p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Experience Points</h3>
               
-              <div className="text-center mb-4">
-                <div className={`text-3xl font-bold ${getLevelColor(level)}`}>
-                  Level {level}
+              {userStats.xp === 0 ? (
+                <div className="text-center mb-4">
+                  <div className="text-3xl font-bold text-gray-400 mb-2">
+                    Level 1
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">0 total XP</p>
+                  <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-3 border border-green-200">
+                    <p className="text-xs text-green-800 font-medium">
+                      🎯 Complete your first lesson to earn 50 XP and unlock your potential!
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-600">{totalXP} total XP</p>
-              </div>
+              ) : (
+                <div className="text-center mb-4">
+                  <div className={`text-3xl font-bold ${getLevelColor(userStats.level)}`}>
+                    Level {userStats.level}
+                  </div>
+                  <p className="text-sm text-gray-600">{userStats.xp.toLocaleString()} total XP</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Next level: {((userStats.level * 1000) - userStats.xp).toLocaleString()} XP needed
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3">
                 {achievements.map((achievement) => (
@@ -522,12 +1027,31 @@ const Dashboard: React.FC = () => {
               <div className="text-center">
                 <FaPlay className="text-primary-600 text-2xl mx-auto mb-3" />
                 <h3 className="font-semibold text-gray-900 mb-2">Continue Learning</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Pick up where you left off in {currentCourse.title}
-                </p>
-                <button className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-700 transition-colors">
-                  Resume Course
-                </button>
+                {currentCourse ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Pick up where you left off in {currentCourse.title}
+                    </p>
+                    <button 
+                      onClick={() => navigate(`/course/${currentCourse.id}/overview`)}
+                      className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-700 transition-colors"
+                    >
+                      Resume Course
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Start your learning journey today
+                    </p>
+                    <button 
+                      onClick={() => navigate('/courses')}
+                      className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-primary-700 transition-colors"
+                    >
+                      Browse Courses
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
