@@ -1,14 +1,196 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ProgressRing from '../../components/ProgressRing';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CourseOverview: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
+  
+  const [course, setCourse] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch course data
+  useEffect(() => {
+    const fetchCourse = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // First, refresh the session to ensure we have a valid token
+        const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+        
+        if (sessionError) {
+          console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
+          const { data: currentSession } = await supabase.auth.getSession();
+          if (!currentSession.session) {
+            setError('Authentication required. Please sign in again.');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        const { data, error: fetchError } = await supabase
+          .from('courses')
+          .select(`
+            *,
+            course_videos (
+              id,
+              name,
+              duration,
+              order_index
+            )
+          `)
+          .eq('id', id)
+          .single();
+        
+        if (fetchError) {
+          console.error('❌ Error fetching course:', fetchError);
+          throw fetchError;
+        }
+        
+        if (data) {
+          console.log('✅ Course data received:', data);
+          setCourse(data);
+        } else {
+          setError('Course not found');
+        }
+      } catch (err) {
+        console.error('❌ Error fetching course:', err);
+        setError(`Failed to load course: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourse();
+  }, [id]);
+
+  // Helper function to calculate total duration from videos
+  const calculateTotalDuration = (videos: any[]): string => {
+    if (!videos || videos.length === 0) return '0 min';
+    
+    let totalMinutes = 0;
+    let totalSeconds = 0;
+    
+    videos.forEach(video => {
+      const duration = video.duration;
+      if (duration) {
+        // Handle different duration formats: "5:30", "5 min", "5m 30s", etc.
+        if (duration.includes(':')) {
+          const parts = duration.split(':');
+          if (parts.length === 2) {
+            totalMinutes += parseInt(parts[0]) || 0;
+            totalSeconds += parseInt(parts[1]) || 0;
+          } else if (parts.length === 3) {
+            totalMinutes += parseInt(parts[0]) || 0;
+            totalMinutes += (parseInt(parts[1]) || 0) * 60;
+            totalSeconds += parseInt(parts[2]) || 0;
+          }
+        } else if (duration.includes('min') || duration.includes('m')) {
+          const match = duration.match(/(\d+)/);
+          if (match) totalMinutes += parseInt(match[1]) || 0;
+        } else if (duration.includes('h') || duration.includes('hour')) {
+          const match = duration.match(/(\d+)/);
+          if (match) totalMinutes += (parseInt(match[1]) || 0) * 60;
+        } else {
+          // Try to parse as just a number (assume minutes)
+          const num = parseInt(duration);
+          if (!isNaN(num)) totalMinutes += num;
+        }
+      }
+    });
+    
+    // Convert seconds to minutes
+    totalMinutes += Math.floor(totalSeconds / 60);
+    totalSeconds = totalSeconds % 60;
+    
+    // Format the result
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      if (mins === 0) {
+        return `${hours}h`;
+      } else {
+        return `${hours}h ${mins}m`;
+      }
+    } else {
+      return `${totalMinutes}m`;
+    }
+  };
 
   const startCourse = () => {
-    navigate(`/course/${id}/lesson/1`);
+    if (course?.course_videos && course.course_videos.length > 0) {
+      navigate(`/course/${id}/lesson/${course.course_videos[0].id}`);
+    } else {
+      navigate(`/course/${id}/lesson/1`);
+    }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <p className="mt-2 text-gray-600">Loading course...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <p className="text-red-700 font-medium mb-3">{error}</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Try Again
+              </button>
+              <button 
+                onClick={() => navigate('/courses')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Back to Courses
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No course data
+  if (!course) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <p className="text-yellow-700 font-medium mb-3">Course not found</p>
+            <button 
+              onClick={() => navigate('/courses')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Back to Courses
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-16">
@@ -29,8 +211,8 @@ const CourseOverview: React.FC = () => {
         {/* Hero */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-700 to-primary-500 text-white p-8 mb-8">
           <div className="max-w-3xl">
-            <h1 className="text-3xl md:text-4xl font-extrabold mb-3">Course Title</h1>
-            <p className="text-primary-100 mb-6">A clean, cinematic overview that invites you to begin immediately.</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold mb-3">{course.title || 'Course Title'}</h1>
+            <p className="text-primary-100 mb-6">{course.description || 'A clean, cinematic overview that invites you to begin immediately.'}</p>
             <div className="flex items-center gap-4">
               <button onClick={startCourse} className="bg-white text-primary-700 font-semibold px-5 py-2 rounded-lg hover:bg-primary-50 transition">Start Course</button>
               <div className="bg-white/10 rounded-full p-1">
@@ -45,15 +227,15 @@ const CourseOverview: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="bg-white border rounded-xl p-4">
             <div className="text-sm text-gray-500">Lessons</div>
-            <div className="text-xl font-bold">12</div>
+            <div className="text-xl font-bold">{course.course_videos?.length || 0}</div>
           </div>
           <div className="bg-white border rounded-xl p-4">
             <div className="text-sm text-gray-500">Duration</div>
-            <div className="text-xl font-bold">5h 40m</div>
+            <div className="text-xl font-bold">{calculateTotalDuration(course.course_videos || [])}</div>
           </div>
           <div className="bg-white border rounded-xl p-4">
             <div className="text-sm text-gray-500">Level</div>
-            <div className="text-xl font-bold capitalize">Beginner</div>
+            <div className="text-xl font-bold capitalize">{course.level || 'Beginner'}</div>
           </div>
         </div>
 
