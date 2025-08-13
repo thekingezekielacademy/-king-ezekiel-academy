@@ -38,6 +38,13 @@ const Courses: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasTrialAccess, setHasTrialAccess] = useState(false);
+  const [trialStatus, setTrialStatus] = useState({
+    isActive: false,
+    startDate: '',
+    endDate: '',
+    daysRemaining: 0,
+    isExpired: true
+  });
   const COURSES_PER_PAGE = 10;
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -59,8 +66,14 @@ const Courses: React.FC = () => {
         const timeDiff = endDate.getTime() - now.getTime();
         const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
           
-          const hasAccess = parsedTrial.isActive && daysRemaining > 0;
+          const updatedTrialStatus = {
+            ...parsedTrial,
+            daysRemaining,
+            isExpired: daysRemaining <= 0
+          };
+          const hasAccess = updatedTrialStatus.isActive && daysRemaining > 0;
           setHasTrialAccess(hasAccess);
+          setTrialStatus(updatedTrialStatus);
           console.log('Trial access check from localStorage:', hasAccess, 'days remaining:', daysRemaining);
           return;
         } catch (parseError) {
@@ -98,10 +111,18 @@ const Courses: React.FC = () => {
         // Save to localStorage
         localStorage.setItem('user_trial_status', JSON.stringify(newTrialStatus));
         setHasTrialAccess(true);
+        setTrialStatus(newTrialStatus);
         console.log('✅ Initialized trial for new user in Courses:', newTrialStatus);
       } else {
         // User is older than 7 days, no trial
         setHasTrialAccess(false);
+        setTrialStatus({
+          isActive: false,
+          startDate: '',
+          endDate: '',
+          daysRemaining: 0,
+          isExpired: true
+        });
         console.log('User is older than 7 days, no trial available');
       }
       
@@ -546,8 +567,110 @@ const Courses: React.FC = () => {
           </p>
         </div>
 
-        {/* Membership Notice - Only show when subscription is not active and no trial access */}
-        {(!user || (!secureStorage.isSubscriptionActive() && !hasTrialAccess)) && (
+        {/* Beautiful Subscription Status Banners */}
+        {user && (
+          <>
+            {/* Active Subscription Banner */}
+            {secureStorage.isSubscriptionActive() && (
+              <div className="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-emerald-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-white/20 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-1">🎉 Premium Access Active!</h3>
+                      <p className="text-emerald-100">You have unlimited access to all courses and premium features</p>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex items-center space-x-2 bg-white/20 rounded-full px-4 py-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="font-semibold">Active</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Free Trial Banner */}
+            {!secureStorage.isSubscriptionActive() && hasTrialAccess && (
+              <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-white/20 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-1">⏰ Free Trial Active</h3>
+                      <p className="text-blue-100">
+                        {trialStatus.daysRemaining > 0 
+                          ? `You have ${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? '' : 's'} left in your free trial`
+                          : 'Your free trial is ending today'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex items-center space-x-2">
+                    <button 
+                      onClick={() => navigate('/profile')}
+                      className="bg-white/20 hover:bg-white/30 rounded-full px-4 py-2 font-semibold transition-all duration-200"
+                    >
+                      Upgrade Now
+                    </button>
+                  </div>
+                </div>
+                {/* Progress bar for trial days */}
+                <div className="mt-4">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Trial Progress</span>
+                    <span>{Math.max(0, 7 - trialStatus.daysRemaining)}/7 days used</span>
+                  </div>
+                  <div className="w-full bg-white/20 rounded-full h-2">
+                    <div 
+                      className="bg-white h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, ((7 - trialStatus.daysRemaining) / 7) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Trial Expired Banner */}
+            {!secureStorage.isSubscriptionActive() && !hasTrialAccess && (
+              <div className="bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-white/20 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-1">⚠️ Trial Expired</h3>
+                      <p className="text-orange-100">Your free trial has ended. Subscribe to continue learning!</p>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex items-center space-x-2">
+                    <button 
+                      onClick={() => navigate('/profile')}
+                      className="bg-white/20 hover:bg-white/30 rounded-full px-4 py-2 font-semibold transition-all duration-200"
+                    >
+                      Subscribe Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Membership Notice - Only show when user is not signed in */}
+        {!user && (
         <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 mb-8 text-white">
           <div className="flex items-center justify-center space-x-3">
             <FaLock className="h-6 w-6" />
