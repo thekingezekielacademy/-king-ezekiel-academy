@@ -14,6 +14,7 @@ interface CourseData {
   title: string;
   description: string;
   level: string;
+  category: string;
   coverPhoto?: File;
   videos: Video[];
 }
@@ -28,6 +29,7 @@ const EditCourse: React.FC = () => {
     title: '',
     description: '',
     level: 'beginner',
+    category: 'business-entrepreneurship',
     coverPhoto: undefined,
     videos: []
   });
@@ -74,6 +76,7 @@ const EditCourse: React.FC = () => {
         title: course.title || '',
         description: course.description || '',
         level: course.level || 'beginner',
+        category: course.category || 'business-entrepreneurship',
         coverPhoto: undefined,
         videos: videos || []
       });
@@ -286,6 +289,7 @@ const EditCourse: React.FC = () => {
           title: courseData.title,
           description: courseData.description,
           level: courseData.level,
+          category: courseData.category,
           ...(coverPhotoUrl && { cover_photo_url: coverPhotoUrl })
         })
         .eq('id', courseId);
@@ -500,6 +504,31 @@ const EditCourse: React.FC = () => {
                 <option value="advanced">Lv 3 – Advanced</option>
                 <option value="expert">Lv 4 – Expert</option>
                 <option value="mastery">Lv 5 – Mastery</option>
+              </select>
+            </div>
+
+            {/* Course Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Course Category *
+              </label>
+              <select
+                value={courseData.category}
+                onChange={(e) => handleInputChange('category', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="business-entrepreneurship">Business & Entrepreneurship</option>
+                <option value="branding-public-relations">Branding & Public Relations</option>
+                <option value="content-communication">Content & Communication</option>
+                <option value="digital-advertising">Digital Advertising</option>
+                <option value="email-seo-strategies">Email & SEO Strategies</option>
+                <option value="ui-ux-design">UI/UX Design</option>
+                <option value="visual-communication">Visual Communication</option>
+                <option value="video-editing-creation">Video Editing & Creation</option>
+                <option value="data-science-analytics">Data Science & Analytics</option>
+                <option value="artificial-intelligence-cloud">Artificial Intelligence & Cloud</option>
+                <option value="project-workflow-management">Project & Workflow Management</option>
+                <option value="information-security">Information Security</option>
               </select>
             </div>
           </div>

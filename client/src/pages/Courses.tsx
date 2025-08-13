@@ -311,7 +311,7 @@ const Courses: React.FC = () => {
                               const transformedCourses = retryData.map(course => ({
                     ...course,
                     // Add real data from videos
-                    category: 'general', // Default category since it doesn't exist in DB
+                    category: course.category || 'general', // Use actual category from DB
                     duration: calculateTotalDuration(course.course_videos || []),
                     instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
                     rating: 4.5, // Default rating since it doesn't exist in DB
@@ -345,11 +345,14 @@ const Courses: React.FC = () => {
       
       if (data) {
         console.log(`✅ Courses data received for page ${page}:`, data);
+        console.log(`🔍 Sample course data:`, data[0]);
+        console.log(`🔍 Sample course_videos:`, data[0]?.course_videos);
+        console.log(`🔍 Sample category:`, data[0]?.category);
                           // Transform data to match our interface
                   const transformedCourses = data.map(course => ({
                     ...course,
                     // Add real data from videos
-                    category: 'general', // Default category since it doesn't exist in DB
+                    category: course.category || 'general', // Use actual category from DB
                     duration: calculateTotalDuration(course.course_videos || []),
                     instructor: 'King Ezekiel Academy', // Default instructor since it doesn't exist in DB
                     rating: 4.5, // Default rating since it doesn't exist in DB
@@ -404,52 +407,60 @@ const Courses: React.FC = () => {
   const calculateTotalDuration = (videos: any[]): string => {
     if (!videos || videos.length === 0) return '0 min';
     
-    let totalMinutes = 0;
     let totalSeconds = 0;
     
     videos.forEach(video => {
       const duration = video.duration;
       if (duration) {
-        // Handle different duration formats: "5:30", "5 min", "5m 30s", etc.
+        // Handle different duration formats: "1:30:25", "5:30", "5 min", "5m 30s", etc.
         if (duration.includes(':')) {
           const parts = duration.split(':');
           if (parts.length === 2) {
-            totalMinutes += parseInt(parts[0]) || 0;
+            // Format: "5:30" (minutes:seconds)
+            totalSeconds += (parseInt(parts[0]) || 0) * 60;
             totalSeconds += parseInt(parts[1]) || 0;
           } else if (parts.length === 3) {
-            totalMinutes += parseInt(parts[0]) || 0;
-            totalMinutes += (parseInt(parts[1]) || 0) * 60;
-            totalSeconds += parseInt(parts[2]) || 0;
+            // Format: "1:30:25" (hours:minutes:seconds)
+            totalSeconds += (parseInt(parts[0]) || 0) * 3600; // hours to seconds
+            totalSeconds += (parseInt(parts[1]) || 0) * 60;   // minutes to seconds
+            totalSeconds += parseInt(parts[2]) || 0;           // seconds
           }
         } else if (duration.includes('min') || duration.includes('m')) {
           const match = duration.match(/(\d+)/);
-          if (match) totalMinutes += parseInt(match[1]) || 0;
+          if (match) totalSeconds += (parseInt(match[1]) || 0) * 60;
         } else if (duration.includes('h') || duration.includes('hour')) {
           const match = duration.match(/(\d+)/);
-          if (match) totalMinutes += (parseInt(match[1]) || 0) * 60;
+          if (match) totalSeconds += (parseInt(match[1]) || 0) * 3600;
         } else {
           // Try to parse as just a number (assume minutes)
           const num = parseInt(duration);
-          if (!isNaN(num)) totalMinutes += num;
+          if (!isNaN(num)) totalSeconds += num * 60;
         }
       }
     });
     
-    // Convert seconds to minutes
-    totalMinutes += Math.floor(totalSeconds / 60);
-    totalSeconds = totalSeconds % 60;
+    // Convert total seconds to hours, minutes, seconds
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     
     // Format the result
-    if (totalMinutes >= 60) {
-      const hours = Math.floor(totalMinutes / 60);
-      const mins = totalMinutes % 60;
-      if (mins === 0) {
+    if (hours > 0) {
+      if (minutes === 0 && seconds === 0) {
         return `${hours}h`;
+      } else if (seconds === 0) {
+        return `${hours}h ${minutes}m`;
       } else {
-        return `${hours}h ${mins}m`;
+        return `${hours}h ${minutes}m ${seconds}s`;
+      }
+    } else if (minutes > 0) {
+      if (seconds === 0) {
+        return `${minutes}m`;
+      } else {
+        return `${minutes}m ${seconds}s`;
       }
     } else {
-      return `${totalMinutes}m`;
+      return `${seconds}s`;
     }
   };
 
@@ -587,41 +598,41 @@ const Courses: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-4 mb-4">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-            Explore Our Courses
-          </h1>
-                          {user && (
-                <button
-                  onClick={() => {
-                    if (!loading) {
-                      setCurrentPage(0);
-                      setHasMore(true);
-                      setError(null);
-                      fetchCourses(0, false);
-                    }
-                  }}
-                  disabled={loading}
-                  className="p-2 text-gray-600 hover:text-primary-600 transition-colors"
-                  title="Refresh courses"
-                >
-                <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 leading-tight">
+              Explore Our Courses
+            </h1>
+            {user && (
+              <button
+                onClick={() => {
+                  if (!loading) {
+                    setCurrentPage(0);
+                    setHasMore(true);
+                    setError(null);
+                    fetchCourses(0, false);
+                  }
+                }}
+                disabled={loading}
+                className="p-1.5 sm:p-2 text-gray-600 hover:text-primary-600 transition-colors"
+                title="Refresh courses"
+              >
+                <svg className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
             )}
           </div>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl mx-auto px-2 sm:px-0 leading-relaxed">
             Master the most in-demand digital skills with our comprehensive courses. Register as a member to access all courses.
           </p>
         </div>
 
         {/* Beautiful Subscription Status Banner */}
         {user && (
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
 
             {/* Active Subscription - Green */}
             {(secureStorage.isSubscriptionActive() || 
@@ -631,13 +642,13 @@ const Courses: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                   <div className="flex items-center space-x-3 sm:space-x-4">
                     <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
-                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-lg sm:text-2xl font-bold mb-1">🎉 Full Access Active!</h3>
-                      <p className="text-green-100 text-sm sm:text-lg">Your subscription gives you unlimited access to all courses</p>
+                      <h3 className="text-base sm:text-lg md:text-2xl font-bold mb-1">🎉 Full Access Active!</h3>
+                      <p className="text-green-100 text-xs sm:text-sm md:text-lg leading-relaxed">Your subscription gives you unlimited access to all courses</p>
                     </div>
                   </div>
                   <div className="text-center sm:text-right">
@@ -657,19 +668,19 @@ const Courses: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                   <div className="flex items-center space-x-3 sm:space-x-4">
                     <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
-                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-lg sm:text-2xl font-bold mb-1">⏰ Free Trial Active</h3>
-                      <p className="text-blue-100 text-sm sm:text-lg">Enjoy full access for a limited time - upgrade to continue learning</p>
+                      <h3 className="text-base sm:text-lg md:text-2xl font-bold mb-1">⏰ Free Trial Active</h3>
+                      <p className="text-blue-100 text-xs sm:text-sm md:text-lg leading-relaxed">Enjoy full access for a limited time - upgrade to continue learning</p>
                     </div>
                   </div>
                   <div className="text-center sm:text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white text-blue-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
+                      className="bg-white text-blue-600 px-3 sm:px-4 md:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-xs sm:text-sm md:text-base"
                     >
                       Upgrade Now
                     </button>
@@ -686,19 +697,19 @@ const Courses: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                   <div className="flex items-center space-x-3 sm:space-x-4">
                     <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
-                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-lg sm:text-2xl font-bold mb-1">⚠️ Trial Expired</h3>
-                      <p className="text-orange-100 text-sm sm:text-lg">Your free trial has ended - subscribe to continue learning</p>
+                      <h3 className="text-base sm:text-lg md:text-2xl font-bold mb-1">⚠️ Trial Expired</h3>
+                      <p className="text-orange-100 text-xs sm:text-sm md:text-lg leading-relaxed">Your free trial has ended - subscribe to continue learning</p>
                     </div>
                   </div>
                   <div className="text-center sm:text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white text-orange-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-orange-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
+                      className="bg-white text-orange-600 px-3 sm:px-4 md:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-orange-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-xs sm:text-sm md:text-base"
                     >
                       Subscribe Now
                     </button>
@@ -711,24 +722,24 @@ const Courses: React.FC = () => {
 
         {/* Guest User Banner - Purple */}
         {!user && (
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
             <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl border border-purple-400">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                 <div className="flex items-center space-x-3 sm:space-x-4">
                   <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
-                    <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-lg sm:text-2xl font-bold mb-1">👋 Welcome Guest!</h3>
-                    <p className="text-purple-100 text-sm sm:text-lg">Browse our courses and sign up to start learning</p>
+                    <h3 className="text-base sm:text-lg md:text-2xl font-bold mb-1">👋 Welcome Guest!</h3>
+                    <p className="text-purple-100 text-xs sm:text-sm md:text-lg leading-relaxed">Browse our courses and sign up to start learning</p>
                   </div>
                 </div>
                 <div className="text-center sm:text-right">
                   <button 
                     onClick={() => navigate('/signin')}
-                    className="bg-white text-purple-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
+                    className="bg-white text-purple-600 px-3 sm:px-4 md:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-xs sm:text-sm md:text-base"
                   >
                     Sign In
                   </button>
@@ -741,28 +752,28 @@ const Courses: React.FC = () => {
 
 
         {/* Search and Filters */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           {/* Search Bar - Full Width on Mobile */}
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <div className="relative">
-              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
               <input
                 type="text"
                 placeholder="Search courses..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm sm:text-base"
               />
             </div>
           </div>
 
           {/* Filters - Responsive Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
             {/* Category Filter */}
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-xs sm:text-sm"
             >
               {categories.map(category => (
                 <option key={category.value} value={category.value}>{category.label}</option>
@@ -773,7 +784,7 @@ const Courses: React.FC = () => {
             <select
               value={selectedLevel}
               onChange={(e) => setSelectedLevel(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-xs sm:text-sm"
             >
               {levels.map(level => (
                 <option key={level.value} value={level.value}>{level.label}</option>
@@ -784,7 +795,7 @@ const Courses: React.FC = () => {
             <select
               value={selectedSort}
               onChange={(e) => handleSortChange(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-xs sm:text-sm"
             >
               {sortOptions.map(sort => (
                 <option key={sort.value} value={sort.value}>{sort.label}</option>
@@ -796,33 +807,33 @@ const Courses: React.FC = () => {
           {(selectedCategory !== 'all' || selectedLevel !== 'all' || selectedSort !== 'all') && (
             <div className="flex flex-wrap gap-2 mb-4">
               {selectedCategory !== 'all' && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                <span className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
                   {categories.find(c => c.value === selectedCategory)?.label}
                   <button
                     onClick={() => setSelectedCategory('all')}
-                    className="ml-2 text-primary-600 hover:text-primary-800"
+                    className="ml-1.5 sm:ml-2 text-primary-600 hover:text-primary-800"
                   >
                     ×
                   </button>
                 </span>
               )}
               {selectedLevel !== 'all' && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                   {levels.find(l => l.value === selectedLevel)?.label}
                   <button
                     onClick={() => setSelectedLevel('all')}
-                    className="ml-2 text-blue-600 hover:text-blue-800"
+                    className="ml-1.5 sm:ml-2 text-blue-600 hover:text-blue-800"
                   >
                     ×
                   </button>
                 </span>
               )}
               {selectedSort !== 'all' && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <span className="inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   {sortOptions.find(s => s.value === selectedSort)?.label}
                   <button
                     onClick={() => handleSortChange('all')}
-                    className="ml-2 text-green-600 hover:text-green-800"
+                    className="ml-1.5 sm:ml-2 text-green-600 hover:text-green-800"
                   >
                     ×
                   </button>
@@ -834,7 +845,7 @@ const Courses: React.FC = () => {
                   setSelectedLevel('all');
                   handleSortChange('all');
                 }}
-                className="text-sm text-gray-600 hover:text-gray-800 underline"
+                className="text-xs sm:text-sm text-gray-600 hover:text-gray-800 underline"
               >
                 Clear all filters
               </button>
@@ -844,31 +855,31 @@ const Courses: React.FC = () => {
 
         {/* Loading State */}
         {loading && (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-            <p className="mt-2 text-gray-600">Loading courses...</p>
+          <div className="text-center py-8 sm:py-12">
+            <div className="inline-block animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-primary-600"></div>
+            <p className="mt-2 text-gray-600 text-sm sm:text-base">Loading courses...</p>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <p className="text-red-700 font-medium mb-3">{error}</p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 sm:p-6 text-center">
+            <p className="text-red-700 font-medium mb-3 text-sm sm:text-base">{error}</p>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
               <button 
                 onClick={() => {
                   setCurrentPage(0);
                   setHasMore(true);
                   fetchCourses(0, false);
                 }}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm sm:text-base"
               >
                 Try Again
               </button>
               {error.includes('Authentication') && (
                 <button 
                   onClick={() => navigate('/signin')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                 >
                   Sign In
                 </button>
@@ -879,68 +890,70 @@ const Courses: React.FC = () => {
 
         {/* Courses Grid */}
         {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {filteredCourses.map(course => (
             <div key={course.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
               <div className="relative">
                 <img 
                   src={course.cover_photo || 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=250&fit=crop'} 
                   alt={course.title}
-                  className="w-full h-48 object-cover"
+                  className="w-full h-40 sm:h-48 object-cover"
                 />
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-2 sm:top-4 right-2 sm:right-4">
                   {getLevelBadge(course.level)}
                 </div>
-                <div className="absolute top-4 left-4 bg-primary-600 text-white px-3 py-1 rounded text-sm font-medium flex items-center space-x-1">
+                <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-primary-600 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-medium flex items-center space-x-1">
                   <FaGraduationCap className="h-3 w-3" />
-                  <span>{user && secureStorage.isSubscriptionActive() ? 'Full Access' : 'Membership'}</span>
+                  <span className="hidden sm:inline">{user && secureStorage.isSubscriptionActive() ? 'Full Access' : 'Membership'}</span>
+                  <span className="sm:hidden">{user && secureStorage.isSubscriptionActive() ? 'Access' : 'Member'}</span>
                 </div>
               </div>
               
-              <div className="p-6">
-                <div className="flex items-center space-x-2 mb-3">
+              <div className="p-4 sm:p-6">
+                <div className="flex items-center space-x-2 mb-2 sm:mb-3">
                   {getCategoryIcon(course.category)}
-                  <span className="text-sm text-gray-500 capitalize">{course.category?.replace('-', ' ') || 'General'}</span>
+                  <span className="text-xs sm:text-sm text-gray-500 capitalize">{course.category?.replace('-', ' ') || 'General'}</span>
                 </div>
                 
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{course.title}</h3>
-                <p className="text-gray-600 mb-4 line-clamp-2">{course.description || 'No description available'}</p>
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 leading-tight">{course.title}</h3>
+                <p className="text-gray-600 mb-3 sm:mb-4 line-clamp-2 text-sm sm:text-base">{course.description || 'No description available'}</p>
                 
-                <div className="flex items-center space-x-4 mb-4 text-sm text-gray-500">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm text-gray-500">
                   <div className="flex items-center space-x-1">
-                    <FaClock className="h-4 w-4" />
+                    <FaClock className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>{course.duration}</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <FaBook className="h-4 w-4" />
+                    <FaBook className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>{course.lessons} {course.lessons === 1 ? 'lesson' : 'lessons'}</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <FaUser className="h-4 w-4" />
-                    <span>{course.instructor}</span>
+                    <FaUser className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">{course.instructor}</span>
+                    <span className="sm:hidden">Admin</span>
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center space-x-2">
-                    <span className="text-lg font-semibold text-primary-600">
+                    <span className="text-sm sm:text-lg font-semibold text-primary-600">
                       {user && (secureStorage.isSubscriptionActive() || hasTrialAccess) ? 'Full Access' : 'Membership Access'}
                     </span>
                   </div>
-                  <button onClick={() => handleEnroll(course.id)} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors duration-200 flex items-center space-x-2">
+                  <button onClick={() => handleEnroll(course.id)} className="w-full sm:w-auto bg-primary-600 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center space-x-2 text-sm sm:text-base">
                     {user && (secureStorage.isSubscriptionActive() || hasTrialAccess) ? (
                       <>
-                      <FaUnlock className="h-4 w-4" />
+                      <FaUnlock className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span>Start Learning</span>
                       </>
                     ) : user ? (
                       <>
-                        <FaLock className="h-4 w-4" />
+                        <FaLock className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span>Upgrade to Access</span>
                       </>
                     ) : (
                       <>
-                      <FaLock className="h-4 w-4" />
+                      <FaLock className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span>Sign In</span>
                       </>
                     )}
@@ -954,35 +967,35 @@ const Courses: React.FC = () => {
 
         {/* Load More Button */}
         {hasMore && !loading && !error && (
-          <div className="text-center mt-8">
+          <div className="text-center mt-6 sm:mt-8">
             <button
               onClick={loadMoreCourses}
               disabled={loadingMore}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+              className="inline-flex items-center gap-2 sm:gap-3 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg text-sm sm:text-base"
             >
               {loadingMore ? (
                 <>
-                  <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span className="font-semibold">Loading More Courses...</span>
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-white"></div>
+                  <span className="font-semibold">Loading More...</span>
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                   <span className="font-semibold">Load More Courses</span>
                 </>
               )}
             </button>
-            <p className="text-sm text-gray-500 mt-3">
+            <p className="text-xs sm:text-sm text-gray-500 mt-2 sm:mt-3">
               Showing {courses.length} courses • Click to load {COURSES_PER_PAGE} more
             </p>
           </div>
         )}
 
         {filteredCourses.length === 0 && !loading && !error && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No courses found matching your criteria.</p>
+          <div className="text-center py-8 sm:py-12">
+            <p className="text-gray-500 text-base sm:text-lg">No courses found matching your criteria.</p>
           </div>
         )}
 

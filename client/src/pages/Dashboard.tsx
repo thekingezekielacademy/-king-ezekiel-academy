@@ -471,8 +471,8 @@ const Dashboard: React.FC = () => {
                 id: recentCourseId,
                 title: 'Recent Course', // We'll update this when we fetch course details
                 progress: parseInt(recentCourseProgress) || 0,
-                totalLessons: 2, // Default assumption
-                completedLessons: Math.floor((parseInt(recentCourseProgress) || 0) / 100 * 2),
+                totalLessons: 0, // Will be updated with real data
+                completedLessons: 0, // Will be updated with real data
                 category: 'General',
                 instructor: 'Admin',
                 rating: 4.8,
@@ -480,7 +480,7 @@ const Dashboard: React.FC = () => {
                 image: '/api/placeholder/300/200'
               });
               
-              // Try to fetch actual course details to update the title
+              // Try to fetch actual course details and video count
               try {
                 const { data: courseData } = await supabase
                   .from('courses')
@@ -489,11 +489,24 @@ const Dashboard: React.FC = () => {
                   .single();
                 
                 if (courseData) {
+                  // Fetch actual video count for this course
+                  const { count: actualTotalLessons } = await supabase
+                    .from('course_videos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('course_id', recentCourseId);
+                  
+                  const actualTotalLessonsCount = actualTotalLessons || 0;
+                  const actualProgress = actualTotalLessonsCount > 0 ? Math.round((parseInt(recentCourseProgress) || 0)) : 0;
+                  const actualCompletedLessons = actualTotalLessonsCount > 0 ? Math.floor((parseInt(recentCourseProgress) || 0) / 100 * actualTotalLessonsCount) : 0;
+                  
                   setCurrentCourse(prev => prev ? {
                     ...prev,
                     title: courseData.title,
                     category: courseData.level || 'General',
-                    image: courseData.cover_photo_url || '/api/placeholder/300/200'
+                    image: courseData.cover_photo_url || '/api/placeholder/300/200',
+                    totalLessons: actualTotalLessonsCount,
+                    completedLessons: actualCompletedLessons,
+                    progress: actualProgress
                   } : null);
                 }
               } catch (fetchError) {

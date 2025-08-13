@@ -64,10 +64,18 @@ const AdminCourses: React.FC = () => {
         if (course.course_videos && course.course_videos.length > 0) {
           const totalSeconds = course.course_videos.reduce((total, video) => {
             const duration = video.duration;
-            // Parse duration in various formats (e.g., "15:30", "15m 30s", "PT5M30S")
+            // Parse duration in various formats (e.g., "1:30:25", "15:30", "15m 30s", "PT5M30S")
             if (duration.includes(':')) {
-              const [minutes, seconds] = duration.split(':').map(Number);
-              return total + (minutes * 60) + (seconds || 0);
+              const parts = duration.split(':');
+              if (parts.length === 2) {
+                // Format: "15:30" (minutes:seconds)
+                const [minutes, seconds] = parts.map(Number);
+                return total + (minutes * 60) + (seconds || 0);
+              } else if (parts.length === 3) {
+                // Format: "1:30:25" (hours:minutes:seconds)
+                const [hours, minutes, seconds] = parts.map(Number);
+                return total + (hours * 3600) + (minutes * 60) + (seconds || 0);
+              }
             } else if (duration.includes('m') && duration.includes('s')) {
               const minutes = parseInt(duration.match(/(\d+)m/)?.[1] || '0');
               const seconds = parseInt(duration.match(/(\d+)s/)?.[1] || '0');
@@ -81,9 +89,16 @@ const AdminCourses: React.FC = () => {
             return total;
           }, 0);
           
-          const minutes = Math.floor(totalSeconds / 60);
+          // Convert to hours:minutes:seconds format
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
           const seconds = totalSeconds % 60;
-          totalDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          
+          if (hours > 0) {
+            totalDuration = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+          } else {
+            totalDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          }
         }
 
         return {

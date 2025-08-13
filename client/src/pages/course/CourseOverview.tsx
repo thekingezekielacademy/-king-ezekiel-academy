@@ -131,52 +131,60 @@ const CourseOverview: React.FC = () => {
   const calculateTotalDuration = (videos: any[]): string => {
     if (!videos || videos.length === 0) return '0 min';
     
-    let totalMinutes = 0;
     let totalSeconds = 0;
     
     videos.forEach(video => {
       const duration = video.duration;
       if (duration) {
-        // Handle different duration formats: "5:30", "5 min", "5m 30s", etc.
+        // Handle different duration formats: "1:30:25", "5:30", "5 min", "5m 30s", etc.
         if (duration.includes(':')) {
           const parts = duration.split(':');
           if (parts.length === 2) {
-            totalMinutes += parseInt(parts[0]) || 0;
+            // Format: "5:30" (minutes:seconds)
+            totalSeconds += (parseInt(parts[0]) || 0) * 60;
             totalSeconds += parseInt(parts[1]) || 0;
           } else if (parts.length === 3) {
-            totalMinutes += parseInt(parts[0]) || 0;
-            totalMinutes += (parseInt(parts[1]) || 0) * 60;
-            totalSeconds += parseInt(parts[2]) || 0;
+            // Format: "1:30:25" (hours:minutes:seconds)
+            totalSeconds += (parseInt(parts[0]) || 0) * 3600; // hours to seconds
+            totalSeconds += (parseInt(parts[1]) || 0) * 60;   // minutes to seconds
+            totalSeconds += parseInt(parts[2]) || 0;           // seconds
           }
         } else if (duration.includes('min') || duration.includes('m')) {
           const match = duration.match(/(\d+)/);
-          if (match) totalMinutes += parseInt(match[1]) || 0;
+          if (match) totalSeconds += (parseInt(match[1]) || 0) * 60;
         } else if (duration.includes('h') || duration.includes('hour')) {
           const match = duration.match(/(\d+)/);
-          if (match) totalMinutes += (parseInt(match[1]) || 0) * 60;
+          if (match) totalSeconds += (parseInt(match[1]) || 0) * 3600;
         } else {
           // Try to parse as just a number (assume minutes)
           const num = parseInt(duration);
-          if (!isNaN(num)) totalMinutes += num;
+          if (!isNaN(num)) totalSeconds += num * 60;
         }
       }
     });
     
-    // Convert seconds to minutes
-    totalMinutes += Math.floor(totalSeconds / 60);
-    totalSeconds = totalSeconds % 60;
+    // Convert total seconds to hours, minutes, seconds
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     
     // Format the result
-    if (totalMinutes >= 60) {
-      const hours = Math.floor(totalMinutes / 60);
-      const mins = totalMinutes % 60;
-      if (mins === 0) {
+    if (hours > 0) {
+      if (minutes === 0 && seconds === 0) {
         return `${hours}h`;
+      } else if (seconds === 0) {
+        return `${hours}h ${minutes}m`;
       } else {
-        return `${hours}h ${mins}m`;
+        return `${hours}h ${minutes}m ${seconds}s`;
+      }
+    } else if (minutes > 0) {
+      if (seconds === 0) {
+        return `${minutes}m`;
+      } else {
+        return `${minutes}m ${seconds}s`;
       }
     } else {
-      return `${totalMinutes}m`;
+      return `${seconds}s`;
     }
   };
 
@@ -303,20 +311,18 @@ const CourseOverview: React.FC = () => {
         )}
 
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-700 to-primary-500 text-white p-8 mb-8">
+        <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-primary-700 to-primary-500 text-white p-4 sm:p-6 md:p-8 mb-6 sm:mb-8">
           <div className="max-w-3xl">
-            <h1 className="text-3xl md:text-4xl font-extrabold mb-3">{course.title || 'Course Title'}</h1>
-            <p className="text-primary-100 mb-6">{course.description || 'A clean, cinematic overview that invites you to begin immediately.'}</p>
-            <div className="flex items-center gap-4">
-              <button onClick={startCourse} className="bg-white text-primary-700 font-semibold px-5 py-2 rounded-lg hover:bg-primary-50 transition">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-2 sm:mb-3 leading-tight">{course.title || 'Course Title'}</h1>
+            <p className="text-primary-100 mb-4 sm:mb-6 text-sm sm:text-base leading-relaxed">{course.description || 'A clean, cinematic overview that invites you to begin immediately.'}</p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+              <button onClick={startCourse} className="w-full sm:w-auto bg-white text-primary-700 font-semibold px-4 sm:px-5 py-2 sm:py-3 rounded-lg hover:bg-primary-50 transition text-sm sm:text-base">
                 {user ? 'Start Course' : 'Sign In to Start'}
               </button>
               {user && (
-                <div className="bg-white/10 rounded-full p-1">
-                  <ProgressRing size={64} strokeWidth={6} progress={userProgress} />
-                  <div className="text-center mt-2 text-sm">
-                    <span className="font-semibold">{userProgress}%</span>
-                  </div>
+                <div className="bg-white/10 rounded-full p-1 self-center sm:self-auto">
+                  <ProgressRing size={48} strokeWidth={5} progress={userProgress} className="sm:hidden" />
+                  <ProgressRing size={64} strokeWidth={6} progress={userProgress} className="hidden sm:block" />
                 </div>
               )}
             </div>
@@ -325,33 +331,33 @@ const CourseOverview: React.FC = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white border rounded-xl p-4">
-            <div className="text-sm text-gray-500">Lessons</div>
-            <div className="text-xl font-bold">{course.course_videos?.length || 0}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <div className="bg-white border rounded-lg sm:rounded-xl p-3 sm:p-4">
+            <div className="text-xs sm:text-sm text-gray-500">Lessons</div>
+            <div className="text-lg sm:text-xl font-bold">{course.course_videos?.length || 0}</div>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <div className="text-sm text-gray-500">Duration</div>
-            <div className="text-xl font-bold">{calculateTotalDuration(course.course_videos || [])}</div>
+          <div className="bg-white border rounded-lg sm:rounded-xl p-3 sm:p-4">
+            <div className="text-xs sm:text-sm text-gray-500">Duration</div>
+            <div className="text-lg sm:text-xl font-bold">{calculateTotalDuration(course.course_videos || [])}</div>
           </div>
-          <div className="bg-white border rounded-xl p-4">
-            <div className="text-sm text-gray-500">Level</div>
-            <div className="text-xl font-bold capitalize">{course.level || 'Beginner'}</div>
+          <div className="bg-white border rounded-lg sm:rounded-xl p-3 sm:p-4">
+            <div className="text-xs sm:text-sm text-gray-500">Level</div>
+            <div className="text-lg sm:text-xl font-bold capitalize">{course.level || 'Beginner'}</div>
           </div>
         </div>
 
         {/* Rewards & Motivation */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white border rounded-xl p-6">
-            <h2 className="text-lg font-bold mb-2">Course Rewards</h2>
-            <ul className="text-gray-700 list-disc list-inside space-y-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white border rounded-lg sm:rounded-xl p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-bold mb-2">Course Rewards</h2>
+            <ul className="text-gray-700 list-disc list-inside space-y-1 text-sm sm:text-base">
               <li>🏅 Badge unlocked at 100%</li>
               <li>🎓 Certificate available on completion</li>
             </ul>
           </div>
-          <div className="bg-white border rounded-xl p-6">
-            <h2 className="text-lg font-bold mb-2">Motivation</h2>
-            <p className="text-gray-700">“In 7 days, you could master this skill — let’s start today.”</p>
+          <div className="bg-white border rounded-lg sm:rounded-xl p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-bold mb-2">Motivation</h2>
+            <p className="text-gray-700 text-sm sm:text-base">“In 7 days, you could master this skill — let’s start today.”</p>
           </div>
         </div>
       </div>

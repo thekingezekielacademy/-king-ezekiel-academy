@@ -1,317 +1,440 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaSearch, FaClock, FaUser, FaEye, FaTag, FaFolder } from 'react-icons/fa';
+import { FaSearch, FaClock, FaUser, FaTags, FaFolder, FaArrowRight } from 'react-icons/fa';
+import { createClient } from '@supabase/supabase-js';
+
+// Create an anonymous client for public blog access
+const supabase = createClient(
+  'https://evqerkqiquwxqlizdqmg.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cWVya3FpcXV3eHFsaXpkcW1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ2NzE0NTUsImV4cCI6MjA3MDI0NzQ1NX0.0hoqOOvJzRFX6zskur2HixoIW2XfAP0fMBwTMGcd7kw',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    }
+  }
+);
 
 interface BlogPost {
   id: string;
   title: string;
+  slug: string;
+  content: string;
   excerpt: string;
   featured_image_url: string;
-  author: string;
+  status: 'draft' | 'published';
   published_at: string;
-  read_time: string;
-  views: number;
-  category: string;
-  tags: string[];
+  created_at: string;
+  updated_at: string;
+  categories: Array<{ name: string }>;
+  tags: Array<{ name: string }>;
 }
 
 const Blog: React.FC = () => {
   const navigate = useNavigate();
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const postsPerPage = 9;
 
-  // Dummy data for beautiful interface
-  const dummyPosts: BlogPost[] = [
-    {
-      id: '1',
-      title: 'Mastering React Hooks: A Comprehensive Guide',
-      excerpt: 'Learn how to leverage React Hooks to build more efficient and maintainable components. From useState to custom hooks, we cover everything you need to know.',
-      featured_image_url: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      author: 'Sarah Johnson',
-      published_at: '2024-01-15',
-      read_time: '8 min read',
-      views: 1247,
-      category: 'Programming',
-      tags: ['React', 'JavaScript', 'Frontend']
-    },
-    {
-      id: '2',
-      title: 'The Future of Online Education: Trends to Watch',
-      excerpt: 'Discover the latest trends shaping online education and how they\'re revolutionizing the way we learn. From AI-powered learning to virtual reality classrooms.',
-      featured_image_url: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80',
-      author: 'Michael Chen',
-      published_at: '2024-01-12',
-      read_time: '12 min read',
-      views: 2156,
-      category: 'Education',
-      tags: ['Online Learning', 'Technology', 'Future']
-    },
-    {
-      id: '3',
-      title: 'Building Scalable APIs with Node.js and Express',
-      excerpt: 'Step-by-step guide to building robust, scalable APIs using Node.js and Express. Learn best practices for authentication, validation, and error handling.',
-      featured_image_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      author: 'David Rodriguez',
-      published_at: '2024-01-10',
-      read_time: '15 min read',
-      views: 1893,
-      category: 'Programming',
-      tags: ['Node.js', 'Express', 'API', 'Backend']
-    },
-    {
-      id: '4',
-      title: 'Effective Study Techniques for Online Learners',
-      excerpt: 'Maximize your online learning experience with proven study techniques. From time management to active learning strategies, boost your productivity.',
-      featured_image_url: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      author: 'Emily Watson',
-      published_at: '2024-01-08',
-      read_time: '6 min read',
-      views: 3421,
-      category: 'Study Tips',
-      tags: ['Learning', 'Productivity', 'Online Education']
-    },
-    {
-      id: '5',
-      title: 'CSS Grid vs Flexbox: When to Use Each',
-      excerpt: 'Master the art of CSS layout with this comprehensive comparison of Grid and Flexbox. Learn when and how to use each for optimal results.',
-      featured_image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80',
-      author: 'Alex Thompson',
-      published_at: '2024-01-05',
-      read_time: '10 min read',
-      views: 1678,
-      category: 'Programming',
-      tags: ['CSS', 'Frontend', 'Layout', 'Design']
-    },
-    {
-      id: '6',
-      title: 'The Psychology of Learning: How to Retain Information Better',
-      excerpt: 'Understand the science behind learning and memory. Discover techniques that will help you retain information longer and learn more effectively.',
-      featured_image_url: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      author: 'Dr. Lisa Park',
-      published_at: '2024-01-03',
-      read_time: '14 min read',
-      views: 2987,
-      category: 'Psychology',
-      tags: ['Learning', 'Memory', 'Psychology', 'Education']
+  useEffect(() => {
+    fetchBlogPosts();
+  }, [currentPage, selectedCategory, selectedTag]);
+
+  const fetchBlogPosts = async () => {
+    try {
+      setLoading(true);
+      
+      let query = supabase
+        .from('blog_posts')
+        .select(`
+          *,
+          blog_post_categories(
+            blog_categories(name)
+          ),
+          blog_post_tags(
+            blog_tags(name)
+          )
+        `)
+        .eq('status', 'published')
+        .order('published_at', { ascending: false });
+
+      // Apply category filter
+      if (selectedCategory) {
+        query = query.eq('blog_post_categories.blog_categories.name', selectedCategory);
+      }
+
+      // Apply tag filter
+      if (selectedTag) {
+        query = query.eq('blog_post_tags.blog_tags.name', selectedTag);
+      }
+
+      // Apply pagination
+      const from = (currentPage - 1) * postsPerPage;
+      const to = from + postsPerPage - 1;
+      query = query.range(from, to);
+
+      const { data: posts, error: postsError } = await query;
+
+      if (postsError) {
+        console.error('Error fetching blog posts:', postsError);
+        console.log('Error code:', postsError.code);
+        console.log('Error message:', postsError.message);
+        
+        // Handle specific error cases
+        if (postsError.code === 'PGRST303' || postsError.message?.includes('JWT expired')) {
+          setError('Authentication required. Please sign in again.');
+        } else if (postsError.code === 'PGRST116' || postsError.message?.includes('JWT')) {
+          setError('Access denied. Blog posts are not publicly accessible. Admin needs to disable RLS policies.');
+        } else if (postsError.code === '401' || postsError.message?.includes('Unauthorized')) {
+          setError('Blog access blocked by Row Level Security (RLS) policies. The admin needs to disable RLS on the blog_posts table.');
+        } else if (postsError.code === 'PGRST301' || postsError.message?.includes('permission denied')) {
+          setError('Permission denied. Blog posts table has restricted access. Admin needs to disable RLS policies.');
+        } else {
+          setError(`Failed to load blog posts: ${postsError.message || 'Unknown error'}`);
+        }
+        return;
+      }
+
+      // Transform the data
+      const transformedPosts: BlogPost[] = posts?.map((post: any) => ({
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        content: post.content,
+        excerpt: post.excerpt,
+        featured_image_url: post.featured_image_url,
+        status: post.status,
+        published_at: post.published_at,
+        created_at: post.created_at,
+        updated_at: post.updated_at,
+        categories: post.blog_post_categories?.filter((c: any) => c.blog_categories)?.map((c: any) => ({ name: c.blog_categories.name })) || [],
+        tags: post.blog_post_tags?.filter((t: any) => t.blog_tags)?.map((t: any) => ({ name: t.blog_tags.name })) || []
+      })) || [];
+
+      if (currentPage === 1) {
+        setBlogPosts(transformedPosts);
+      } else {
+        setBlogPosts(prev => [...prev, ...transformedPosts]);
+      }
+
+      setHasMore(transformedPosts.length === postsPerPage);
+    } catch (error) {
+      console.error('Error fetching blog posts:', error);
+      setError('Failed to load blog posts');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const categories = [
-    { name: 'all', label: 'All Posts', count: dummyPosts.length },
-    { name: 'Programming', label: 'Programming', count: dummyPosts.filter(p => p.category === 'Programming').length },
-    { name: 'Education', label: 'Education', count: dummyPosts.filter(p => p.category === 'Education').length },
-    { name: 'Study Tips', label: 'Study Tips', count: dummyPosts.filter(p => p.category === 'Study Tips').length },
-    { name: 'Psychology', label: 'Psychology', count: dummyPosts.filter(p => p.category === 'Psychology').length }
-  ];
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    fetchBlogPosts();
+  };
 
-  const allTags = Array.from(new Set(dummyPosts.flatMap(post => post.tags)));
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category === selectedCategory ? '' : category);
+    setSelectedTag('');
+    setCurrentPage(1);
+  };
 
-  const filteredPosts = dummyPosts.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         post.excerpt.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         post.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = selectedCategory === 'all' || post.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+  const handleTagChange = (tag: string) => {
+    setSelectedTag(tag === selectedTag ? '' : tag);
+    setSelectedCategory('');
+    setCurrentPage(1);
+  };
+
+  const loadMore = () => {
+    setCurrentPage(prev => prev + 1);
+  };
+
+  const getReadingTime = (content: string) => {
+    const wordsPerMinute = 200;
+    const wordCount = content.split(' ').length;
+    return Math.ceil(wordCount / wordsPerMinute);
+  };
+
+  const getUniqueCategories = () => {
+    const categories = new Set<string>();
+    blogPosts.forEach(post => {
+      post.categories.forEach(cat => categories.add(cat.name));
+    });
+    return Array.from(categories);
+  };
+
+  const getUniqueTags = () => {
+    const tags = new Set<string>();
+    blogPosts.forEach(post => {
+      post.tags.forEach(tag => tags.add(tag.name));
+    });
+    return Array.from(tags);
+  };
+
+  const filteredPosts = blogPosts.filter(post => {
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        post.title.toLowerCase().includes(searchLower) ||
+        post.excerpt.toLowerCase().includes(searchLower) ||
+        post.content.toLowerCase().includes(searchLower)
+      );
+    }
+    return true;
   });
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      'Programming': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Education': 'bg-green-100 text-green-800 border-green-200',
-      'Study Tips': 'bg-purple-100 text-purple-800 border-purple-200',
-      'Psychology': 'bg-orange-100 text-orange-800 border-orange-200'
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900">Blog Access Error</h1>
+            <p className="mt-2 text-gray-600 mb-4">{error}</p>
+            
+            {error.includes('RLS') || error.includes('security policies') ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 max-w-2xl mx-auto mb-6">
+                <h3 className="text-lg font-medium text-yellow-800 mb-3">Quick Fix Required</h3>
+                <p className="text-yellow-700 mb-4">
+                  The blog posts are currently blocked by database security policies. This needs to be fixed by an administrator.
+                </p>
+                <div className="bg-yellow-100 p-4 rounded-lg">
+                  <p className="text-sm font-medium text-yellow-800 mb-2">Admin Action Required:</p>
+                  <ol className="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
+                    <li>Go to <a href="https://supabase.com/dashboard/project/hclguhbswctxfahhzrrr" target="_blank" rel="noopener noreferrer" className="underline">Supabase Dashboard</a></li>
+                    <li>Click "SQL Editor" in the left sidebar</li>
+                    <li>Run this command: <code className="bg-yellow-200 px-2 py-1 rounded font-mono">ALTER TABLE blog_posts DISABLE ROW LEVEL SECURITY;</code></li>
+                    <li>Click "Run" button</li>
+                  </ol>
+                </div>
+              </div>
+            ) : null}
+            
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header Section */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+    <div className="min-h-screen bg-gray-50 pt-16">
+      {/* Hero Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="text-center">
+          <h1 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
             Our Blog
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Discover insights, tips, and stories from our community of learners and educators. 
-            Stay updated with the latest trends in education and technology.
+          <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto">
+            Discover insights, tips, and strategies to help you master digital skills and grow your business
           </p>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Search and Filters */}
         <div className="mb-8">
-          {/* Search Bar */}
-          <div className="relative max-w-md mx-auto mb-6">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaSearch className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search articles..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-            />
-          </div>
-
-          {/* Category Pills */}
-          <div className="flex flex-wrap justify-center gap-3 mb-6">
-            {categories.map((category) => (
+          <form onSubmit={handleSearch} className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search blog posts..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
               <button
-                key={category.name}
-                onClick={() => setSelectedCategory(category.name)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                  selectedCategory === category.name
-                    ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                }`}
+                type="submit"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                {category.label}
-                <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
-                  {category.count}
-                </span>
+                Search
               </button>
-            ))}
-          </div>
+            </div>
+          </form>
 
-          {/* Popular Tags */}
-          <div className="flex flex-wrap justify-center gap-2">
-            {allTags.slice(0, 8).map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200"
-              >
-                <FaTag className="w-3 h-3 mr-1" />
-                {tag}
-              </span>
-            ))}
+          {/* Category and Tag Filters */}
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Categories:</span>
+              <div className="flex flex-wrap gap-2">
+                {getUniqueCategories().map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => handleCategoryChange(category)}
+                    className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                      selectedCategory === category
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Tags:</span>
+              <div className="flex flex-wrap gap-2">
+                {getUniqueTags().map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => handleTagChange(tag)}
+                    className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                      selectedTag === tag
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Blog Posts Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-          {filteredPosts.map((post) => (
-            <article
-              key={post.id}
-              className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 overflow-hidden group"
-            >
-              {/* Featured Image */}
-              <div className="relative h-48 overflow-hidden">
-                <img
-                  src={post.featured_image_url}
-                  alt={post.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute top-4 left-4">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getCategoryColor(post.category)}`}>
-                    <FaFolder className="w-3 h-3 mr-1" />
-                    {post.category}
-                  </span>
-                </div>
-                <div className="absolute top-4 right-4">
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-black bg-opacity-75 text-white">
-                    <FaEye className="w-3 h-3 mr-1" />
-                    {post.views.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="p-6">
-                {/* Tags */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {post.tags.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Title */}
-                <h2 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors duration-200">
-                  {post.title}
-                </h2>
-
-                {/* Excerpt */}
-                <p className="text-gray-600 mb-4 line-clamp-3">
-                  {post.excerpt}
-                </p>
-
-                {/* Meta Information */}
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center">
-                      <FaUser className="w-4 h-4 mr-1" />
-                      <span>{post.author}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <FaClock className="w-4 h-4 mr-1" />
-                      <span>{post.read_time}</span>
-                    </div>
-                  </div>
-                  <span className="text-gray-400">
-                    {formatDate(post.published_at)}
-                  </span>
-                </div>
-
-                {/* Read More Button */}
-                <button 
-                  onClick={() => navigate(`/blog/${post.id}`)}
-                  className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                >
-                  Read Article
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {/* Load More Button */}
-        {filteredPosts.length > 0 && (
-          <div className="text-center mb-12">
-            <button className="inline-flex items-center px-6 py-3 border border-gray-300 rounded-lg text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-105">
-              Load More Articles
-              <svg className="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
+        {loading && currentPage === 1 ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-600">Loading blog posts...</span>
           </div>
-        )}
-
-        {/* Empty State */}
-        {filteredPosts.length === 0 && (
-          <div className="text-center py-16">
-            <div className="mx-auto h-24 w-24 text-gray-300 mb-4">
-              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        ) : filteredPosts.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No articles found</h3>
-            <p className="text-gray-500 mb-4">
-              Try adjusting your search terms or category filters.
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No blog posts found</h3>
+            <p className="text-gray-500">
+              {searchTerm || selectedCategory || selectedTag
+                ? 'Try adjusting your search or filters.'
+                : 'No published blog posts yet. Check back later for new content.'
+              }
             </p>
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('all');
-              }}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Clear filters
-            </button>
+            {!searchTerm && !selectedCategory && !selectedTag && (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-gray-500">
+                  Admin users can create blog posts from the admin panel.
+                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                  <h4 className="text-sm font-medium text-blue-800 mb-2">Quick Test</h4>
+                  <p className="text-sm text-blue-700 mb-3">
+                    To test the blog functionality, you need to:
+                  </p>
+                  <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Go to Supabase Dashboard → SQL Editor</li>
+                    <li>Run: <code className="bg-blue-100 px-1 rounded">ALTER TABLE blog_posts DISABLE ROW LEVEL SECURITY;</code></li>
+                    <li>Create a blog post from Admin Panel</li>
+                  </ol>
+                </div>
+              </div>
+            )}
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredPosts.map((post) => (
+                <article key={post.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                  {/* Featured Image */}
+                  {post.featured_image_url && (
+                    <div className="relative">
+                      <img 
+                        src={post.featured_image_url} 
+                        alt={post.title}
+                        className="w-full h-48 object-cover"
+                      />
+                      <div className="absolute top-4 left-4">
+                        {post.categories.length > 0 && (
+                          <span className="inline-block px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">
+                            {post.categories[0].name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="p-6">
+                    <h2 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2">
+                      {post.title}
+                    </h2>
+                    
+                    {post.excerpt && (
+                      <p className="text-gray-600 mb-4 line-clamp-3">
+                        {post.excerpt}
+                      </p>
+                    )}
+
+                    {/* Tags */}
+                    {post.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {post.tags.slice(0, 3).map((tag, index) => (
+                          <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                            {tag.name}
+                          </span>
+                        ))}
+                        {post.tags.length > 3 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                            +{post.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Meta Information */}
+                    <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                      <div className="flex items-center gap-2">
+                        <FaClock className="w-4 h-4" />
+                        <span>{getReadingTime(post.content)} min read</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <FaUser className="w-4 h-4" />
+                        <span>Admin</span>
+                      </div>
+                    </div>
+
+                    {/* Read More Button */}
+                    <button
+                      onClick={() => navigate(`/blog/${post.slug}`)}
+                      className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                    >
+                      Read Article
+                      <FaArrowRight className="w-4 h-4 ml-2" />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {/* Load More Button */}
+            {hasMore && (
+              <div className="text-center mt-12">
+                <button
+                  onClick={loadMore}
+                  disabled={loading}
+                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? 'Loading...' : 'Load More Posts'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

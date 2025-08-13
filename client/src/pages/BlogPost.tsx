@@ -1,413 +1,341 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { FaArrowLeft, FaClock, FaUser, FaEye, FaTag, FaFolder, FaHeart, FaShare, FaComment, FaCalendar, FaBookmark } from 'react-icons/fa';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { FaArrowLeft, FaCalendar, FaClock, FaUser, FaTags, FaFolder, FaShare, FaTwitter, FaFacebook, FaLinkedin, FaArrowUp } from 'react-icons/fa';
+import { createClient } from '@supabase/supabase-js';
 
-interface Comment {
-  id: string;
-  author: string;
-  avatar: string;
-  content: string;
-  created_at: string;
-  likes: number;
-}
 
-interface BlogPost {
+// Create an anonymous client for public blog access
+const supabase = createClient(
+  'https://evqerkqiquwxqlizdqmg.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cWVya3FpcXV3eHFsaXpkcW1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ2NzE0NTUsImV4cCI6MjA3MDI0NzQ1NX0.0hoqOOvJzRFX6zskur2HixoIW2XfAP0fMBwTMGcd7kw',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    }
+  }
+);
+
+interface BlogPostData {
   id: string;
   title: string;
+  slug: string;
   content: string;
   excerpt: string;
   featured_image_url: string;
-  author: string;
-  author_avatar: string;
-  author_bio: string;
+  status: 'draft' | 'published';
   published_at: string;
-  read_time: string;
-  views: number;
-  likes: number;
-  category: string;
-  tags: string[];
-  meta_title: string;
-  meta_description: string;
+  created_at: string;
+  updated_at: string;
+  categories: Array<{ name: string }>;
+  tags: Array<{ name: string }>;
 }
 
 const BlogPost: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  
-  const [comment, setComment] = useState('');
-  const [isLiked, setIsLiked] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
-  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [blogPost, setBlogPost] = useState<BlogPostData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Dummy blog post data
-  const blogPost: BlogPost = {
-    id: '1',
-    title: 'Mastering React Hooks: A Comprehensive Guide to Modern React Development',
-    content: '<p class="lead">React Hooks have revolutionized the way we write React components, making them more functional, readable, and maintainable. In this comprehensive guide, we\'ll explore everything you need to know about React Hooks and how to use them effectively in your projects.</p><h2>The Evolution of React Components</h2><p>Before Hooks, React components were primarily class-based, which often led to complex lifecycle methods and difficult-to-reuse logic. With the introduction of Hooks in React 16.8, functional components became the preferred way to write React code.</p><h2>Understanding useState Hook</h2><p>The <code>useState</code> hook is the most fundamental hook in React. It allows functional components to manage local state without converting them to class components.</p><pre><code>import React, { useState } from \'react\';\n\nfunction Counter() {\n  const [count, setCount] = useState(0);\n  \n  return (\n    <div>\n      <p>You clicked {count} times</p>\n      <button onClick={() => setCount(count + 1)}>\n        Click me\n      </button>\n    </div>\n  );\n}</code></pre><h2>Mastering useEffect Hook</h2><p>The <code>useEffect</code> hook is used for side effects in functional components. It\'s equivalent to componentDidMount, componentDidUpdate, and componentWillUnmount combined.</p><p>Here are some key concepts to remember:</p><ul><li><strong>Dependency Array:</strong> The second argument controls when the effect runs</li><li><strong>Cleanup Function:</strong> Return a function to clean up side effects</li><li><strong>Multiple Effects:</strong> You can use multiple useEffect hooks in one component</li></ul><h2>Custom Hooks: Reusable Logic</h2><p>One of the most powerful features of Hooks is the ability to create custom hooks. This allows you to extract component logic into reusable functions.</p><pre><code>function useWindowSize() {\n  const [size, setSize] = useState({\n    width: window.innerWidth,\n    height: window.innerHeight\n  });\n\n  useEffect(() => {\n    const handleResize = () => {\n      setSize({\n        width: window.innerWidth,\n        height: window.innerHeight\n      });\n    };\n\n    window.addEventListener(\'resize\', handleResize);\n    return () => window.removeEventListener(\'resize\', handleResize);\n  }, []);\n\n  return size;\n}</code></pre><h2>Performance Optimization with useMemo and useCallback</h2><p>React provides additional hooks for performance optimization:</p><ul><li><code>useMemo</code>: Memoizes expensive calculations</li><li><code>useCallback</code>: Memoizes functions to prevent unnecessary re-renders</li><li><code>useRef</code>: Persists values between renders without causing re-renders</li></ul><h2>Best Practices and Common Pitfalls</h2><p>While Hooks are powerful, they come with their own set of rules and best practices:</p><ol><li><strong>Only call Hooks at the top level</strong> - Don\'t call Hooks inside loops, conditions, or nested functions</li><li><strong>Only call Hooks from React functions</strong> - Call Hooks from React function components or custom Hooks</li><li><strong>Use the dependency array correctly</strong> - Include all values that the effect depends on</li><li><strong>Avoid infinite loops</strong> - Be careful with useEffect dependencies</li></ol><h2>Real-World Examples</h2><p>Let\'s look at a practical example of a custom hook for managing form state:</p><pre><code>function useForm(initialValues) {\n  const [values, setValues] = useState(initialValues);\n  const [errors, setErrors] = useState({});\n  const [isSubmitting, setIsSubmitting] = useState(false);\n\n  const handleChange = (e) => {\n    const { name, value } = e.target;\n    setValues(prev => ({\n      ...prev,\n      [name]: value\n    }));\n  };\n\n  const handleSubmit = async (e) => {\n    e.preventDefault();\n    setIsSubmitting(true);\n    // Handle form submission\n    setIsSubmitting(false);\n  };\n\n  return {\n    values,\n    errors,\n    isSubmitting,\n    handleChange,\n    handleSubmit\n  };\n}</code></pre><h2>Conclusion</h2><p>React Hooks have fundamentally changed how we write React applications. They provide a more intuitive way to manage state and side effects while making our code more readable and maintainable.</p><p>By mastering these concepts and following best practices, you\'ll be able to build more efficient and scalable React applications. Remember, practice is key - the more you use Hooks, the more comfortable you\'ll become with them.</p><p>Happy coding! 🚀</p>',
-    excerpt: 'Learn how to leverage React Hooks to build more efficient and maintainable components. From useState to custom hooks, we cover everything you need to know.',
-    featured_image_url: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-    author: 'Sarah Johnson',
-    author_avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-    author_bio: 'Senior React Developer with 8+ years of experience building scalable web applications. Passionate about clean code, performance optimization, and teaching others.',
-    published_at: '2024-01-15',
-    read_time: '12 min read',
-    views: 1247,
-    likes: 89,
-    category: 'Programming',
-    tags: ['React', 'JavaScript', 'Frontend', 'Web Development', 'Hooks'],
-    meta_title: 'Mastering React Hooks: Complete Guide',
-    meta_description: 'Learn React Hooks from basics to advanced patterns. Master useState, useEffect, custom hooks, and performance optimization techniques.'
-  };
-
-  // Dummy comments
-  const comments: Comment[] = [
-    {
-      id: '1',
-      author: 'Alex Chen',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2071&q=80',
-      content: 'This is exactly what I needed! The examples are so clear and practical. I\'ve been struggling with useEffect dependencies, but this article cleared everything up. Thanks Sarah!',
-      created_at: '2024-01-16T10:30:00Z',
-      likes: 12
-    },
-    {
-      id: '2',
-      author: 'Maria Rodriguez',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      content: 'The custom hooks section is gold! I\'ve been looking for a good example of how to create reusable logic. The form hook example is going straight into my toolkit.',
-      created_at: '2024-01-16T14:15:00Z',
-      likes: 8
-    },
-    {
-      id: '3',
-      author: 'David Kim',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80',
-      content: 'Great article! I especially liked the performance optimization section. useMemo and useCallback have been game-changers for my app\'s performance.',
-      created_at: '2024-01-17T09:45:00Z',
-      likes: 15
+  useEffect(() => {
+    if (slug) {
+      fetchBlogPost();
     }
-  ];
+  }, [slug]);
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-  };
+  const fetchBlogPost = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const handleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
-  };
+      // Fetch the blog post by slug
+      const { data: posts, error: postsError } = await supabase
+        .from('blog_posts')
+        .select(`
+          *,
+          blog_post_categories(
+            blog_categories(name)
+          ),
+          blog_post_tags(
+            blog_tags(name)
+          )
+        `)
+        .eq('slug', slug)
+        .eq('status', 'published')
+        .single();
 
-  const handleShare = () => {
-    setShowShareMenu(!showShareMenu);
-  };
+      if (postsError) {
+        console.error('Error fetching blog post:', postsError);
+        if (postsError.code === 'PGRST116') {
+          setError('Blog post not found');
+        } else {
+          setError('Failed to load blog post');
+        }
+        return;
+      }
 
-  const handleCommentSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (comment.trim()) {
-      // Handle comment submission
-      console.log('Comment submitted:', comment);
-      setComment('');
+      // Transform the data
+      const transformedPost: BlogPostData = {
+        id: posts.id,
+        title: posts.title,
+        slug: posts.slug,
+        content: posts.content,
+        excerpt: posts.excerpt || '',
+        featured_image_url: posts.featured_image_url || '',
+        status: posts.status,
+        published_at: posts.published_at,
+        created_at: posts.created_at,
+        updated_at: posts.updated_at,
+        categories: posts.blog_post_categories?.filter((c: any) => c.blog_categories)?.map((c: any) => ({ name: c.blog_categories.name })) || [],
+        tags: posts.blog_post_tags?.filter((t: any) => t.blog_tags)?.map((t: any) => ({ name: t.blog_tags.name })) || []
+      };
+
+      setBlogPost(transformedPost);
+    } catch (error) {
+      console.error('Error fetching blog post:', error);
+      setError('Failed to load blog post');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+  const getReadingTime = (content: string) => {
+    const wordsPerMinute = 200;
+    const wordCount = content.split(' ').length;
+    return Math.ceil(wordCount / wordsPerMinute);
   };
 
-  const formatCommentDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      'Programming': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Education': 'bg-green-100 text-green-800 border-green-200',
-      'Study Tips': 'bg-purple-100 text-purple-800 border-purple-200',
-      'Psychology': 'bg-orange-100 text-orange-800 border-orange-200'
-    };
-    return colors[category] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-600">Loading blog post...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !blogPost) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900">Error</h1>
+            <p className="mt-2 text-gray-600">{error || 'Blog post not found'}</p>
+            <button
+              onClick={() => navigate('/blog')}
+              className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Back to Blog
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 pt-16">
+      {/* Set page title */}
+      <title>{blogPost?.title || 'Blog Post'} | King Ezekiel Academy</title>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
-        <button
-          onClick={() => navigate('/blog')}
-          className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-6 transition-colors duration-200"
-        >
-          <FaArrowLeft className="w-4 h-4 mr-2" />
-          Back to Blog
-        </button>
+        <div className="mb-6">
+          <Link
+            to="/blog"
+            className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            <FaArrowLeft className="w-4 h-4 mr-2" />
+            Back to Blog
+          </Link>
+        </div>
 
-        {/* Article Header */}
-        <article className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
+        {/* Blog Post Content */}
+        <article className="bg-white rounded-xl shadow-lg overflow-hidden">
           {/* Featured Image */}
-          <div className="relative h-96 overflow-hidden">
-            <img
-              src={blogPost.featured_image_url}
-              alt={blogPost.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-            
-            {/* Category Badge */}
-            <div className="absolute top-6 left-6">
-              <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border ${getCategoryColor(blogPost.category)}`}>
-                <FaFolder className="w-4 h-4 mr-2" />
-                {blogPost.category}
-              </span>
+          {blogPost.featured_image_url && (
+            <div className="relative">
+              <img
+                src={blogPost.featured_image_url}
+                alt={blogPost.title}
+                className="w-full h-64 md:h-80 object-cover"
+              />
             </div>
+          )}
 
-            {/* Action Buttons */}
-            <div className="absolute top-6 right-6 flex space-x-3">
-              <button
-                onClick={handleBookmark}
-                className={`p-3 rounded-full transition-all duration-200 ${
-                  isBookmarked 
-                    ? 'bg-blue-600 text-white shadow-lg' 
-                    : 'bg-white/90 text-gray-700 hover:bg-white'
-                }`}
-              >
-                <FaBookmark className="w-5 h-5" />
-              </button>
-              <button
-                onClick={handleShare}
-                className="p-3 rounded-full bg-white/90 text-gray-700 hover:bg-white transition-all duration-200"
-              >
-                <FaShare className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Share Menu */}
-            {showShareMenu && (
-              <div className="absolute top-20 right-6 bg-white rounded-lg shadow-xl p-4 border">
-                <div className="space-y-2">
-                  <button className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors duration-200">
-                    Copy Link
-                  </button>
-                  <button className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors duration-200">
-                    Share on Twitter
-                  </button>
-                  <button className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors duration-200">
-                    Share on LinkedIn
-                  </button>
-                </div>
+          {/* Content */}
+          <div className="p-6 md:p-8">
+            {/* Meta Information */}
+            <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <FaCalendar className="w-4 h-4" />
+                <span>
+                  {new Date(blogPost.published_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </span>
               </div>
-            )}
-          </div>
+              <div className="flex items-center gap-2">
+                <FaUser className="w-4 h-4" />
+                <span>Admin</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FaClock className="w-4 h-4" />
+                <span>{getReadingTime(blogPost.content)} min read</span>
+              </div>
+            </div>
 
-          {/* Article Content */}
-          <div className="p-8">
+            {/* Categories and Tags */}
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+              {blogPost.categories.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <FaFolder className="w-4 h-4 text-gray-500" />
+                  {blogPost.categories.map((category, index) => (
+                    <span key={index} className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                      {category.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {blogPost.tags.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <FaTags className="w-4 h-4 text-gray-500" />
+                  {blogPost.tags.map((tag, index) => (
+                    <span key={index} className="inline-block px-3 py-1 bg-gray-100 text-gray-600 text-sm font-medium rounded-full">
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Title */}
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
               {blogPost.title}
             </h1>
 
-            {/* Meta Information */}
-            <div className="flex flex-wrap items-center gap-6 mb-8 text-gray-600">
-              <div className="flex items-center">
-                <img
-                  src={blogPost.author_avatar}
-                  alt={blogPost.author}
-                  className="w-10 h-10 rounded-full mr-3"
-                />
-                <div>
-                  <p className="font-medium text-gray-900">{blogPost.author}</p>
-                  <p className="text-sm text-gray-500">{blogPost.author_bio}</p>
+            {/* Excerpt */}
+            {blogPost.excerpt && (
+              <p className="text-xl text-gray-600 mb-6 leading-relaxed">
+                {blogPost.excerpt}
+              </p>
+            )}
+
+            {/* Table of Contents (for longer posts) */}
+            {blogPost.content.length > 1000 && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Table of Contents</h3>
+                <div className="text-sm text-gray-600">
+                  <p>This is a longer article with detailed content. Use the navigation below to jump to specific sections.</p>
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-6">
-                <div className="flex items-center">
-                  <FaCalendar className="w-4 h-4 mr-2" />
-                  <span>{formatDate(blogPost.published_at)}</span>
-                </div>
-                <div className="flex items-center">
-                  <FaClock className="w-4 h-4 mr-2" />
-                  <span>{blogPost.read_time}</span>
-                </div>
-                <div className="flex items-center">
-                  <FaEye className="w-4 h-4 mr-2" />
-                  <span>{blogPost.views.toLocaleString()} views</span>
-                </div>
+            )}
+
+            {/* Content */}
+            <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed">
+              <div className="whitespace-pre-line">
+                {blogPost.content}
               </div>
             </div>
 
-            {/* Tags */}
-            <div className="flex flex-wrap gap-2 mb-8">
-              {blogPost.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200"
-                >
-                  <FaTag className="w-3 h-3 mr-1" />
-                  {tag}
-                </span>
-              ))}
-            </div>
-
-            {/* Article Body */}
-            <div 
-              className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900 prose-code:bg-gray-100 prose-code:px-2 prose-code:py-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100"
-              dangerouslySetInnerHTML={{ __html: blogPost.content }}
-            />
-
-            {/* Article Footer */}
-            <div className="border-t border-gray-200 pt-8 mt-12">
+            {/* Social Sharing */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <FaShare className="w-4 h-4" />
+                  <span>Share this article:</span>
+                </div>
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={handleLike}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-                      isLiked 
-                        ? 'bg-red-100 text-red-600 border border-red-200' 
-                        : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
-                    }`}
+                    onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(blogPost.title)}&url=${encodeURIComponent(window.location.href)}`, '_blank')}
+                    className="p-2 text-blue-400 hover:text-blue-600 transition-colors"
+                    title="Share on Twitter"
                   >
-                    <FaHeart className={`w-4 h-4 ${isLiked ? 'text-red-600' : ''}`} />
-                    <span>{blogPost.likes + (isLiked ? 1 : 0)}</span>
+                    <FaTwitter className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`, '_blank')}
+                    className="p-2 text-blue-600 hover:text-blue-800 transition-colors"
+                    title="Share on Facebook"
+                  >
+                    <FaFacebook className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`, '_blank')}
+                    className="p-2 text-blue-700 hover:text-blue-900 transition-colors"
+                    title="Share on LinkedIn"
+                  >
+                    <FaLinkedin className="w-5 h-5" />
                   </button>
                 </div>
-                
-                <div className="text-sm text-gray-500">
-                  Last updated: {formatDate(blogPost.published_at)}
-                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between text-sm text-gray-500">
+                <span>
+                  Published: {new Date(blogPost.published_at).toLocaleDateString()}
+                </span>
+                <span>
+                  Last updated: {new Date(blogPost.updated_at).toLocaleDateString()}
+                </span>
               </div>
             </div>
           </div>
         </article>
 
-        {/* Comments Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-          <div className="flex items-center mb-6">
-            <FaComment className="w-6 h-6 text-blue-600 mr-3" />
-            <h2 className="text-2xl font-bold text-gray-900">
-              Comments ({comments.length})
-            </h2>
-          </div>
-
-          {/* Comment Form - Only for Students */}
-          {user && (
-            <form onSubmit={handleCommentSubmit} className="mb-8">
-              <div className="flex items-start space-x-4">
-                                 <img
-                   src={(user as any)?.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80'}
-                   alt="Your avatar"
-                   className="w-10 h-10 rounded-full"
-                 />
-                <div className="flex-1">
-                  <textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Share your thoughts on this article..."
-                    className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    rows={4}
-                  />
-                  <div className="flex justify-end mt-3">
-                    <button
-                      type="submit"
-                      disabled={!comment.trim()}
-                      className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Post Comment
-                    </button>
-                  </div>
-                </div>
+        {/* Comment Section */}
+        <div className="mt-12">
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Join the Discussion</h2>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
               </div>
-            </form>
-          )}
-
-          {/* Comments List */}
-          <div className="space-y-6">
-            {comments.map((comment) => (
-              <div key={comment.id} className="flex space-x-4">
-                <img
-                  src={comment.avatar}
-                  alt={comment.author}
-                  className="w-10 h-10 rounded-full"
-                />
-                <div className="flex-1">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">{comment.author}</h4>
-                      <span className="text-sm text-gray-500">
-                        {formatCommentDate(comment.created_at)}
-                      </span>
-                    </div>
-                    <p className="text-gray-700">{comment.content}</p>
-                  </div>
-                  <div className="flex items-center mt-3 space-x-4">
-                    <button className="flex items-center space-x-1 text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200">
-                      <FaHeart className="w-3 h-3" />
-                      <span>{comment.likes}</span>
-                    </button>
-                    <button className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200">
-                      Reply
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Sign In Prompt for Non-Students */}
-          {!user && (
-            <div className="text-center py-8 border-t border-gray-200">
-              <p className="text-gray-600 mb-4">
-                Sign in to join the conversation and share your thoughts!
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Comments Coming Soon</h3>
+              <p className="text-gray-600">
+                We're working on adding a comment system to make our blog more interactive.
               </p>
-              <button
-                onClick={() => navigate('/signin')}
-                className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
-              >
-                Sign In to Comment
-              </button>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Related Articles Suggestion */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Continue Reading
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="group cursor-pointer">
-              <div className="bg-gray-100 rounded-lg p-4 hover:bg-gray-200 transition-colors duration-200">
-                <h3 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors duration-200">
-                  The Future of Online Education: Trends to Watch
-                </h3>
-                <p className="text-sm text-gray-600 mt-2">
-                  Discover the latest trends shaping online education...
-                </p>
-              </div>
-            </div>
-            <div className="group cursor-pointer">
-              <div className="bg-gray-100 rounded-lg p-4 hover:bg-gray-200 transition-colors duration-200">
-                <h3 className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors duration-200">
-                  Building Scalable APIs with Node.js and Express
-                </h3>
-                <p className="text-sm text-gray-600 mt-2">
-                  Step-by-step guide to building robust, scalable APIs...
-                </p>
-              </div>
+        {/* Related Posts Section */}
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">More from Our Blog</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* This would be populated with related posts */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="h-32 bg-gray-200 rounded-lg mb-4"></div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Coming Soon</h3>
+              <p className="text-gray-600 text-sm">More blog posts will appear here as they're published.</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Back to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className="fixed bottom-8 right-8 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 hover:scale-110"
+        title="Back to Top"
+      >
+        <FaArrowUp className="w-5 h-5" />
+      </button>
     </div>
   );
 };

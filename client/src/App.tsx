@@ -19,6 +19,9 @@ import AdminCourses from './pages/admin/AdminCourses';
 import EditCourse from './pages/admin/EditCourse';
 import CourseView from './pages/admin/CourseView';
 import AddCourse from './pages/admin/AddCourse';
+import AdminBlog from './pages/admin/AdminBlog';
+import AddBlogPost from './pages/admin/AddBlogPost';
+import ViewBlogPost from './pages/admin/ViewBlogPost';
 import Profile from './pages/Profile';
 import CourseOverview from './pages/course/CourseOverview';
 import LessonPlayer from './pages/course/LessonPlayer';
@@ -51,6 +54,10 @@ function App() {
               <Route path="/admin/courses/:courseId/edit" element={<AdminRoute><EditCourse /></AdminRoute>} />
               <Route path="/admin/courses/:courseId/view" element={<AdminRoute><CourseView /></AdminRoute>} />
               <Route path="/admin/add-course" element={<AdminRoute><AddCourse /></AdminRoute>} />
+              <Route path="/admin/blog" element={<AdminRoute><AdminBlog /></AdminRoute>} />
+              <Route path="/admin/blog/new" element={<AdminRoute><AddBlogPost /></AdminRoute>} />
+                              <Route path="/admin/blog/:id/edit" element={<AdminRoute><AddBlogPost /></AdminRoute>} />
+                <Route path="/admin/blog/:id/view" element={<AdminRoute><ViewBlogPost /></AdminRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/course/:id" element={<ProtectedRoute><CourseOverview /></ProtectedRoute>} />
               <Route path="/course/:id/overview" element={<ProtectedRoute><CourseOverview /></ProtectedRoute>} />

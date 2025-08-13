@@ -14,6 +14,7 @@ interface CourseData {
   title: string;
   description: string;
   level: string;
+  category: string;
   coverPhoto?: File;
   videos: Video[];
 }
@@ -31,6 +32,7 @@ const AdminAddCourseWizard: React.FC = () => {
     title: '',
     description: '',
     level: 'beginner', // Default level (lowercase)
+    category: 'business-entrepreneurship', // Default category
     coverPhoto: undefined,
     videos: []
   });
@@ -204,6 +206,7 @@ const AdminAddCourseWizard: React.FC = () => {
         title: courseData.title,
         description: courseData.description,
         level: courseData.level,
+        category: courseData.category,
         levelType: typeof courseData.level,
         cover_photo_url: coverPhotoUrl,
         created_by: user?.id
@@ -215,6 +218,7 @@ const AdminAddCourseWizard: React.FC = () => {
           title: courseData.title,
           description: courseData.description,
           level: courseData.level,
+          category: courseData.category,
           cover_photo_url: coverPhotoUrl,
           created_by: user?.id
         })
@@ -307,6 +311,30 @@ const AdminAddCourseWizard: React.FC = () => {
              <option value="expert">Lv 4 – Expert</option>
              <option value="mastery">Lv 5 – Mastery</option>
            </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Course Category
+          </label>
+          <select
+            value={courseData.category}
+            onChange={(e) => handleInputChange('category', e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="business-entrepreneurship">Business & Entrepreneurship</option>
+            <option value="branding-public-relations">Branding & Public Relations</option>
+            <option value="content-communication">Content & Communication</option>
+            <option value="digital-advertising">Digital Advertising</option>
+            <option value="email-seo-strategies">Email & SEO Strategies</option>
+            <option value="ui-ux-design">UI/UX Design</option>
+            <option value="visual-communication">Visual Communication</option>
+            <option value="video-editing-creation">Video Editing & Creation</option>
+            <option value="data-science-analytics">Data Science & Analytics</option>
+            <option value="artificial-intelligence-cloud">Artificial Intelligence & Cloud</option>
+            <option value="project-workflow-management">Project & Workflow Management</option>
+            <option value="information-security">Information Security</option>
+          </select>
         </div>
 
       </div>
