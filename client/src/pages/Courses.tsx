@@ -131,19 +131,21 @@ const Courses: React.FC = () => {
       
       console.log(`🔍 Fetching courses page ${page}...`);
       
-      // First, refresh the session to ensure we have a valid token
-      const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
-      
-      if (sessionError) {
-        console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
-        // If refresh fails, try to get current session
-        const { data: currentSession } = await supabase.auth.getSession();
-        if (!currentSession.session) {
-          console.log('❌ No valid session found');
-          setError('Authentication required. Please sign in again.');
-          if (page === 0) setLoading(false);
-          else setLoadingMore(false);
-          return;
+      // For non-authenticated users, we can still fetch courses for viewing
+      // Only require authentication for actual course access
+      if (!user) {
+        console.log('👤 Guest user fetching courses - allowing read-only access');
+      } else {
+        // First, refresh the session to ensure we have a valid token
+        const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+        
+        if (sessionError) {
+          console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
+          // If refresh fails, try to get current session
+          const { data: currentSession } = await supabase.auth.getSession();
+          if (!currentSession.session) {
+            console.log('⚠️ No valid session found for authenticated user');
+          }
         }
       }
       
@@ -194,7 +196,10 @@ const Courses: React.FC = () => {
           
           if (refreshError) {
             console.error('❌ Failed to refresh session:', refreshError);
-            setError('Authentication expired. Please sign in again.');
+            // For non-authenticated users, this is not an error
+            if (user) {
+              setError('Authentication expired. Please sign in again.');
+            }
             if (page === 0) setLoading(false);
             else setLoadingMore(false);
             return;
@@ -313,7 +318,12 @@ const Courses: React.FC = () => {
       }
     } catch (err) {
       console.error('❌ Error fetching courses:', err);
-      setError(`Failed to load courses from database: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      // For non-authenticated users, show a more friendly error message
+      if (!user) {
+        setError('Unable to load courses at the moment. Please try again later.');
+      } else {
+        setError(`Failed to load courses from database: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     } finally {
       if (page === 0) setLoading(false);
       else setLoadingMore(false);
