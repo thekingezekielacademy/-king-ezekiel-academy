@@ -437,7 +437,7 @@ const LessonPlayer: React.FC = () => {
                     • {completedLessons.size} completed
                   </span>
                 )}
-              </div>
+                </div>
               </div>
               <div className="hidden sm:block">
                 <ProgressRing 
@@ -504,8 +504,8 @@ const LessonPlayer: React.FC = () => {
                     onClick={nextLesson} 
                     className="px-4 py-2 rounded-lg border bg-primary-600 text-white hover:bg-primary-700"
                   >
-                    Next Lesson
-                  </button>
+                  Next Lesson
+                </button>
                 )}
               </div>
             </div>
@@ -535,7 +535,7 @@ const LessonPlayer: React.FC = () => {
                       {isCompleted && (
                         <span className="text-green-600">✓</span>
                       )}
-                    </div>
+                  </div>
                   );
                 })}
               </div>

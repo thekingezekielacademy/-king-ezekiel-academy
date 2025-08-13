@@ -38,13 +38,6 @@ const Courses: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasTrialAccess, setHasTrialAccess] = useState(false);
-  const [trialStatus, setTrialStatus] = useState({
-    isActive: false,
-    startDate: '',
-    endDate: '',
-    daysRemaining: 0,
-    isExpired: true
-  });
   const COURSES_PER_PAGE = 10;
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -66,14 +59,8 @@ const Courses: React.FC = () => {
         const timeDiff = endDate.getTime() - now.getTime();
         const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
           
-          const updatedTrialStatus = {
-            ...parsedTrial,
-            daysRemaining,
-            isExpired: daysRemaining <= 0
-          };
-          const hasAccess = updatedTrialStatus.isActive && daysRemaining > 0;
+          const hasAccess = parsedTrial.isActive && daysRemaining > 0;
           setHasTrialAccess(hasAccess);
-          setTrialStatus(updatedTrialStatus);
           console.log('Trial access check from localStorage:', hasAccess, 'days remaining:', daysRemaining);
           return;
         } catch (parseError) {
@@ -111,18 +98,10 @@ const Courses: React.FC = () => {
         // Save to localStorage
         localStorage.setItem('user_trial_status', JSON.stringify(newTrialStatus));
         setHasTrialAccess(true);
-        setTrialStatus(newTrialStatus);
         console.log('✅ Initialized trial for new user in Courses:', newTrialStatus);
       } else {
         // User is older than 7 days, no trial
         setHasTrialAccess(false);
-        setTrialStatus({
-          isActive: false,
-          startDate: '',
-          endDate: '',
-          daysRemaining: 0,
-          isExpired: true
-        });
         console.log('User is older than 7 days, no trial available');
       }
       
@@ -537,7 +516,7 @@ const Courses: React.FC = () => {
     <div className="min-h-screen bg-gray-50 pt-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-4 mb-4">
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
             Explore Our Courses
@@ -567,98 +546,79 @@ const Courses: React.FC = () => {
           </p>
         </div>
 
-        {/* Beautiful Subscription Status Banners */}
+        {/* Beautiful Subscription Status Banner */}
         {user && (
-          <>
-            {/* Active Subscription Banner */}
+          <div className="mb-8">
+            {/* Active Subscription - Green */}
             {secureStorage.isSubscriptionActive() && (
-              <div className="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-emerald-200">
+              <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-xl border border-green-400">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 rounded-full p-3">
+                    <div className="bg-white/20 p-3 rounded-full">
                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold mb-1">🎉 Premium Access Active!</h3>
-                      <p className="text-emerald-100">You have unlimited access to all courses and premium features</p>
+                      <h3 className="text-2xl font-bold mb-1">🎉 Full Access Active!</h3>
+                      <p className="text-green-100 text-lg">Your subscription gives you unlimited access to all courses</p>
                     </div>
                   </div>
-                  <div className="hidden md:flex items-center space-x-2 bg-white/20 rounded-full px-4 py-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="font-semibold">Active</span>
+                  <div className="text-right">
+                    <div className="bg-white/20 px-4 py-2 rounded-full text-sm font-semibold">
+                      Premium Member
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Free Trial Banner */}
+            {/* Free Trial Active - Blue */}
             {!secureStorage.isSubscriptionActive() && hasTrialAccess && (
-              <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-blue-200">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-xl border border-blue-400">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 rounded-full p-3">
+                    <div className="bg-white/20 p-3 rounded-full">
                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold mb-1">⏰ Free Trial Active</h3>
-                      <p className="text-blue-100">
-                        {trialStatus.daysRemaining > 0 
-                          ? `You have ${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? '' : 's'} left in your free trial`
-                          : 'Your free trial is ending today'
-                        }
-                      </p>
+                      <h3 className="text-2xl font-bold mb-1">⏰ Free Trial Active</h3>
+                      <p className="text-blue-100 text-lg">Enjoy full access for a limited time - upgrade to continue learning</p>
                     </div>
                   </div>
-                  <div className="hidden md:flex items-center space-x-2">
+                  <div className="text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white/20 hover:bg-white/30 rounded-full px-4 py-2 font-semibold transition-all duration-200"
+                      className="bg-white text-blue-600 px-6 py-3 rounded-full font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                     >
                       Upgrade Now
                     </button>
                   </div>
                 </div>
-                {/* Progress bar for trial days */}
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Trial Progress</span>
-                    <span>{Math.max(0, 7 - trialStatus.daysRemaining)}/7 days used</span>
-                  </div>
-                  <div className="w-full bg-white/20 rounded-full h-2">
-                    <div 
-                      className="bg-white h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, ((7 - trialStatus.daysRemaining) / 7) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* Trial Expired Banner */}
-            {!secureStorage.isSubscriptionActive() && !hasTrialAccess && (
-              <div className="bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 rounded-2xl p-6 mb-8 text-white shadow-xl border border-orange-200">
+            {/* Trial Expired - Orange */}
+            {!secureStorage.isSubscriptionActive() && !hasTrialAccess && user && (
+              <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-xl border border-orange-400">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 rounded-full p-3">
+                    <div className="bg-white/20 p-3 rounded-full">
                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold mb-1">⚠️ Trial Expired</h3>
-                      <p className="text-orange-100">Your free trial has ended. Subscribe to continue learning!</p>
+                      <h3 className="text-2xl font-bold mb-1">⚠️ Trial Expired</h3>
+                      <p className="text-orange-100 text-lg">Your free trial has ended - subscribe to continue learning</p>
                     </div>
                   </div>
-                  <div className="hidden md:flex items-center space-x-2">
+                  <div className="text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white/20 hover:bg-white/30 rounded-full px-4 py-2 font-semibold transition-all duration-200"
+                      className="bg-white text-orange-600 px-6 py-3 rounded-full font-semibold hover:bg-orange-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                     >
                       Subscribe Now
                     </button>
@@ -666,21 +626,39 @@ const Courses: React.FC = () => {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {/* Membership Notice - Only show when user is not signed in */}
+        {/* Guest User Banner - Purple */}
         {!user && (
-        <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 mb-8 text-white">
-          <div className="flex items-center justify-center space-x-3">
-            <FaLock className="h-6 w-6" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-1">Membership Required</h3>
-              <p className="text-primary-100">Register as a member to access all courses and start your learning journey</p>
+          <div className="mb-8">
+            <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl p-6 text-white shadow-xl border border-purple-400">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="bg-white/20 p-3 rounded-full">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold mb-1">👋 Welcome Guest!</h3>
+                    <p className="text-purple-100 text-lg">Browse our courses and sign up to start learning</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <button 
+                    onClick={() => navigate('/signin')}
+                    className="bg-white text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  >
+                    Sign In
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
         )}
+
+
 
         {/* Search and Filters */}
         <div className="mb-8">
@@ -928,42 +906,9 @@ const Courses: React.FC = () => {
           </div>
         )}
 
-        {/* Membership CTA - Only show when subscription is not active and no trial access */}
-        {(!user || (!secureStorage.isSubscriptionActive() && !hasTrialAccess)) && (
-        <div className="mt-12 bg-gradient-to-r from-primary-50 to-secondary-50 rounded-xl p-8 text-center">
-          <div className="max-w-2xl mx-auto">
-            <h3 className="text-2xl font-bold text-primary-900 mb-4">
-              Ready to Start Learning?
-            </h3>
-            <p className="text-lg text-primary-700 mb-6">
-              Join thousands of students who have transformed their careers with our comprehensive course library.
-            </p>
-            <button onClick={goToAccess} className="bg-primary-600 text-white px-8 py-3 rounded-lg hover:bg-primary-700 transition-colors duration-200 font-semibold">
-                {user ? 'Subscribe to Access' : 'Sign In'}
-            </button>
-          </div>
-        </div>
-        )}
 
-        {/* Success Message for Active Subscribers */}
-        {user && secureStorage.isSubscriptionActive() && (
-          <div className="mt-12 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-8 text-center border border-green-200">
-            <div className="max-w-2xl mx-auto">
-              <h3 className="text-2xl font-bold text-green-900 mb-4">
-                🎉 You Have Full Access!
-              </h3>
-              <p className="text-lg text-green-700 mb-6">
-                Your active subscription gives you unlimited access to all courses. Start learning and unlock your potential!
-              </p>
-              <div className="flex items-center justify-center gap-2 text-green-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-semibold">Active Subscription</span>
-              </div>
-            </div>
-          </div>
-        )}
+
+
       </div>
     </div>
   );

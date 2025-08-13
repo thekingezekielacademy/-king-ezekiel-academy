@@ -23,16 +23,20 @@ const CourseOverview: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // First, refresh the session to ensure we have a valid token
-        const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
-        
-        if (sessionError) {
-          console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
-          const { data: currentSession } = await supabase.auth.getSession();
-          if (!currentSession.session) {
-            setError('Authentication required. Please sign in again.');
-            setLoading(false);
-            return;
+        // For non-authenticated users, we can still fetch course data for viewing
+        // Only require authentication for actual course access
+        if (!user) {
+          console.log('👤 Guest user viewing course - allowing read-only access');
+        } else {
+          // First, refresh the session to ensure we have a valid token
+          const { data: sessionData, error: sessionError } = await supabase.auth.refreshSession();
+          
+          if (sessionError) {
+            console.log('⚠️ Session refresh failed, trying to get current session:', sessionError);
+            const { data: currentSession } = await supabase.auth.getSession();
+            if (!currentSession.session) {
+              console.log('⚠️ No valid session for authenticated user');
+            }
           }
         }
         
@@ -177,6 +181,17 @@ const CourseOverview: React.FC = () => {
   };
 
   const startCourse = () => {
+    if (!user) {
+      // Redirect non-authenticated users to sign in
+      navigate('/signin', { 
+        state: { 
+          redirectTo: `/course/${id}/lesson/${course?.course_videos?.[0]?.id || '1'}`,
+          message: 'Please sign in to access this course'
+        }
+      });
+      return;
+    }
+    
     if (course?.course_videos && course.course_videos.length > 0) {
       navigate(`/course/${id}/lesson/${course.course_videos[0].id}`);
     } else {
@@ -260,19 +275,50 @@ const CourseOverview: React.FC = () => {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Guest User Banner */}
+        {!user && (
+          <div className="mb-6 bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl p-6 text-white shadow-xl border border-purple-400">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="bg-white/20 p-3 rounded-full">
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-1">👋 Preview Mode</h3>
+                  <p className="text-purple-100">You're viewing this course as a guest. Sign in to start learning and track your progress!</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <button 
+                  onClick={() => navigate('/signin')}
+                  className="bg-white text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  Sign In to Start
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-700 to-primary-500 text-white p-8 mb-8">
           <div className="max-w-3xl">
             <h1 className="text-3xl md:text-4xl font-extrabold mb-3">{course.title || 'Course Title'}</h1>
             <p className="text-primary-100 mb-6">{course.description || 'A clean, cinematic overview that invites you to begin immediately.'}</p>
             <div className="flex items-center gap-4">
-              <button onClick={startCourse} className="bg-white text-primary-700 font-semibold px-5 py-2 rounded-lg hover:bg-primary-50 transition">Start Course</button>
-              <div className="bg-white/10 rounded-full p-1">
-                <ProgressRing size={64} strokeWidth={6} progress={userProgress} />
-                <div className="text-center mt-2 text-sm">
-                  <span className="font-semibold">{userProgress}%</span>
+              <button onClick={startCourse} className="bg-white text-primary-700 font-semibold px-5 py-2 rounded-lg hover:bg-primary-50 transition">
+                {user ? 'Start Course' : 'Sign In to Start'}
+              </button>
+              {user && (
+                <div className="bg-white/10 rounded-full p-1">
+                  <ProgressRing size={64} strokeWidth={6} progress={userProgress} />
+                  <div className="text-center mt-2 text-sm">
+                    <span className="font-semibold">{userProgress}%</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
           <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/10" />
