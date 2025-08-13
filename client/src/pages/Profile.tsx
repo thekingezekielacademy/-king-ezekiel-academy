@@ -285,7 +285,16 @@ const Profile: React.FC = () => {
               
               setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
               
-              // Save to database FIRST (this is the primary storage)
+                            // ALWAYS update secureStorage immediately for instant UI feedback
+              secureStorage.setSubscriptionData({
+                subscription_active: 'true',
+                subscription_ref: response.reference || ref,
+                subscription_amount: '2500',
+                subscription_currency: 'NGN',
+                subscription_next_renewal: nextStr
+              });
+              
+              // Save to database (this is the primary storage)
               if (user?.id) {
                 // Use setTimeout to avoid blocking the callback
                 setTimeout(() => {
@@ -307,17 +316,10 @@ const Profile: React.FC = () => {
                           next_payment_date: next.toISOString(),
                         });
                       
-                                                                          if (subError) {
-                            console.error('Error saving subscription to database:', subError);
-                            // Only use secure storage if database save fails
-                            secureStorage.setSubscriptionData({
-                              subscription_active: 'true',
-                              subscription_ref: response.reference || ref,
-                              subscription_amount: '2500',
-                              subscription_currency: 'NGN',
-                              subscription_next_renewal: nextStr
-                            });
-                          } else {
+                      if (subError) {
+                        console.error('Error saving subscription to database:', subError);
+                        console.log('⚠️ Database save failed, but secureStorage is already updated');
+                      } else {
                         console.log('✅ Subscription saved to database successfully');
                       }
                       
@@ -346,14 +348,7 @@ const Profile: React.FC = () => {
                       
                     } catch (error) {
                       console.error('Error saving to database:', error);
-                      // Fallback to secure storage only if database completely fails
-                      secureStorage.setSubscriptionData({
-                        subscription_active: 'true',
-                        subscription_ref: response.reference || ref,
-                        subscription_amount: '2500',
-                        subscription_currency: 'NGN',
-                        subscription_next_renewal: nextStr
-                      });
+                      console.log('⚠️ Database save failed, but secureStorage is already updated');
                     }
                   };
                   

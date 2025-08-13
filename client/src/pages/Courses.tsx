@@ -38,13 +38,62 @@ const Courses: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasTrialAccess, setHasTrialAccess] = useState(false);
+  const [databaseSubscriptionStatus, setDatabaseSubscriptionStatus] = useState<boolean>(false);
   const COURSES_PER_PAGE = 10;
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Check database subscription status
+  const checkDatabaseSubscription = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!error && data) {
+        console.log('✅ Found active subscription in database:', data);
+        setDatabaseSubscriptionStatus(true);
+        return true;
+      } else {
+        console.log('❌ No active subscription found in database');
+        setDatabaseSubscriptionStatus(false);
+        return false;
+      }
+    } catch (error) {
+      console.log('⚠️ Database subscription check failed (table may not exist yet):', error);
+      setDatabaseSubscriptionStatus(false);
+      return false;
+    }
+  };
+
   // Check if user has trial access
   const checkTrialAccess = async () => {
     if (!user?.id) return;
+    
+    // CRITICAL: If user has an active subscription (any source), they should NOT have trial access
+    const isSubscribed = secureStorage.isSubscriptionActive() || 
+                        localStorage.getItem('subscription_active') === 'true' || 
+                        databaseSubscriptionStatus;
+    
+    if (isSubscribed) {
+      console.log('✅ User has active subscription (secureStorage, localStorage, or database), no trial access needed');
+      setHasTrialAccess(false);
+      
+      // Clear any existing trial data from localStorage since user is subscribed
+      const existingTrial = localStorage.getItem('user_trial_status');
+      if (existingTrial) {
+        console.log('🗑️ Clearing localStorage trial data for subscribed user');
+        localStorage.removeItem('user_trial_status');
+      }
+      return;
+    }
     
     try {
       // First check localStorage for trial status
@@ -53,11 +102,11 @@ const Courses: React.FC = () => {
       if (localTrial) {
         try {
           const parsedTrial = JSON.parse(localTrial);
-                  // Recalculate days remaining - use floor to get exact days, not rounded up
-        const now = new Date();
-        const endDate = new Date(parsedTrial.endDate);
-        const timeDiff = endDate.getTime() - now.getTime();
-        const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
+          // Recalculate days remaining - use floor to get exact days, not rounded up
+          const now = new Date();
+          const endDate = new Date(parsedTrial.endDate);
+          const timeDiff = endDate.getTime() - now.getTime();
+          const daysRemaining = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
           
           const hasAccess = parsedTrial.isActive && daysRemaining > 0;
           setHasTrialAccess(hasAccess);
@@ -108,8 +157,11 @@ const Courses: React.FC = () => {
       // Try database query as well (for when table exists)
       try {
         const trialAccess = await TrialManager.hasTrialAccess(user.id);
-        setHasTrialAccess(trialAccess);
-        console.log('Trial access check from database:', trialAccess);
+        // Only set trial access if user is NOT subscribed
+        if (!isSubscribed) {
+          setHasTrialAccess(trialAccess);
+          console.log('Trial access check from database:', trialAccess);
+        }
       } catch (dbError) {
         console.log('Database table user_trials not available yet');
       }
@@ -118,6 +170,17 @@ const Courses: React.FC = () => {
       setHasTrialAccess(false);
     }
   };
+
+  // Check subscription status and trial access when user changes
+  useEffect(() => {
+    if (user) {
+      // Check database subscription status first
+      checkDatabaseSubscription();
+      
+      // Then check trial access
+      checkTrialAccess();
+    }
+  }, [user]);
 
   // Fetch courses from database with pagination
   const fetchCourses = async (page = 0, append = false) => {
@@ -559,23 +622,26 @@ const Courses: React.FC = () => {
         {/* Beautiful Subscription Status Banner */}
         {user && (
           <div className="mb-8">
+
             {/* Active Subscription - Green */}
-            {secureStorage.isSubscriptionActive() && (
-              <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-xl border border-green-400">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 p-3 rounded-full">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {(secureStorage.isSubscriptionActive() || 
+              localStorage.getItem('subscription_active') === 'true' || 
+              databaseSubscriptionStatus) && (
+              <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl border border-green-400">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                  <div className="flex items-center space-x-3 sm:space-x-4">
+                    <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
+                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-1">🎉 Full Access Active!</h3>
-                      <p className="text-green-100 text-lg">Your subscription gives you unlimited access to all courses</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg sm:text-2xl font-bold mb-1">🎉 Full Access Active!</h3>
+                      <p className="text-green-100 text-sm sm:text-lg">Your subscription gives you unlimited access to all courses</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="bg-white/20 px-4 py-2 rounded-full text-sm font-semibold">
+                  <div className="text-center sm:text-right">
+                    <div className="bg-white/20 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold inline-block">
                       Premium Member
                     </div>
                   </div>
@@ -584,24 +650,26 @@ const Courses: React.FC = () => {
             )}
 
             {/* Free Trial Active - Blue */}
-            {!secureStorage.isSubscriptionActive() && hasTrialAccess && (
-              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-xl border border-blue-400">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 p-3 rounded-full">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {!(secureStorage.isSubscriptionActive() || 
+               localStorage.getItem('subscription_active') === 'true' || 
+               databaseSubscriptionStatus) && hasTrialAccess && (
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl border border-blue-400">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                  <div className="flex items-center space-x-3 sm:space-x-4">
+                    <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
+                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-1">⏰ Free Trial Active</h3>
-                      <p className="text-blue-100 text-lg">Enjoy full access for a limited time - upgrade to continue learning</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg sm:text-2xl font-bold mb-1">⏰ Free Trial Active</h3>
+                      <p className="text-blue-100 text-sm sm:text-lg">Enjoy full access for a limited time - upgrade to continue learning</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-center sm:text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white text-blue-600 px-6 py-3 rounded-full font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      className="bg-white text-blue-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
                     >
                       Upgrade Now
                     </button>
@@ -611,24 +679,26 @@ const Courses: React.FC = () => {
             )}
 
             {/* Trial Expired - Orange */}
-            {!secureStorage.isSubscriptionActive() && !hasTrialAccess && user && (
-              <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-xl border border-orange-400">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-white/20 p-3 rounded-full">
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {!(secureStorage.isSubscriptionActive() || 
+               localStorage.getItem('subscription_active') === 'true' || 
+               databaseSubscriptionStatus) && !hasTrialAccess && user && (
+              <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl border border-orange-400">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                  <div className="flex items-center space-x-3 sm:space-x-4">
+                    <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
+                      <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="text-2xl font-bold mb-1">⚠️ Trial Expired</h3>
-                      <p className="text-orange-100 text-lg">Your free trial has ended - subscribe to continue learning</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg sm:text-2xl font-bold mb-1">⚠️ Trial Expired</h3>
+                      <p className="text-orange-100 text-sm sm:text-lg">Your free trial has ended - subscribe to continue learning</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-center sm:text-right">
                     <button 
                       onClick={() => navigate('/profile')}
-                      className="bg-white text-orange-600 px-6 py-3 rounded-full font-semibold hover:bg-orange-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      className="bg-white text-orange-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-orange-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
                     >
                       Subscribe Now
                     </button>
@@ -642,23 +712,23 @@ const Courses: React.FC = () => {
         {/* Guest User Banner - Purple */}
         {!user && (
           <div className="mb-8">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl p-6 text-white shadow-xl border border-purple-400">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="bg-white/20 p-3 rounded-full">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-xl border border-purple-400">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                <div className="flex items-center space-x-3 sm:space-x-4">
+                  <div className="bg-white/20 p-2 sm:p-3 rounded-full flex-shrink-0">
+                    <svg className="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-bold mb-1">👋 Welcome Guest!</h3>
-                    <p className="text-purple-100 text-lg">Browse our courses and sign up to start learning</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-lg sm:text-2xl font-bold mb-1">👋 Welcome Guest!</h3>
+                    <p className="text-purple-100 text-sm sm:text-lg">Browse our courses and sign up to start learning</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-center sm:text-right">
                   <button 
                     onClick={() => navigate('/signin')}
-                    className="bg-white text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    className="bg-white text-purple-600 px-4 sm:px-6 py-2 sm:py-3 rounded-full font-semibold hover:bg-purple-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
                   >
                     Sign In
                   </button>
