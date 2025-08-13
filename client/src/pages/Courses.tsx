@@ -3,6 +3,7 @@ import { FaSearch, FaClock, FaUser, FaBook, FaTag, FaLock, FaUnlock, FaGraduatio
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import secureStorage from '../utils/secureStorage';
 import TrialManager from '../utils/trialManager';
 
 interface Course {
@@ -400,7 +401,7 @@ const Courses: React.FC = () => {
     console.log('🔍 Trial access debug:', {
       user: user?.id,
       hasTrialAccess,
-      subActive: localStorage.getItem('subscription_active') === 'true',
+              subActive: secureStorage.isSubscriptionActive(),
       trialStatus: localStorage.getItem('user_trial_status')
     });
   }, [user?.id, hasTrialAccess]);
@@ -486,7 +487,7 @@ const Courses: React.FC = () => {
   };
 
   const goToAccess = () => {
-    if (user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess)) {
+    if (user && (secureStorage.isSubscriptionActive() || hasTrialAccess)) {
       // User has active subscription or trial access - go to dashboard
       navigate('/dashboard');
     } else if (user) {
@@ -499,7 +500,7 @@ const Courses: React.FC = () => {
   };
 
   const handleEnroll = (courseId: string) => {
-    if (user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess)) {
+    if (user && (secureStorage.isSubscriptionActive() || hasTrialAccess)) {
       // User is signed in and has active subscription OR trial access - go to course overview
       navigate(`/course/${courseId}/overview`);
     } else if (user) {
@@ -546,7 +547,7 @@ const Courses: React.FC = () => {
         </div>
 
         {/* Membership Notice - Only show when subscription is not active and no trial access */}
-        {(!user || (localStorage.getItem('subscription_active') !== 'true' && !hasTrialAccess)) && (
+        {(!user || (!secureStorage.isSubscriptionActive() && !hasTrialAccess)) && (
         <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 mb-8 text-white">
           <div className="flex items-center justify-center space-x-3">
             <FaLock className="h-6 w-6" />
@@ -711,7 +712,7 @@ const Courses: React.FC = () => {
                 </div>
                 <div className="absolute top-4 left-4 bg-primary-600 text-white px-3 py-1 rounded text-sm font-medium flex items-center space-x-1">
                   <FaGraduationCap className="h-3 w-3" />
-                  <span>{user && localStorage.getItem('subscription_active') === 'true' ? 'Full Access' : 'Membership'}</span>
+                  <span>{user && secureStorage.isSubscriptionActive() ? 'Full Access' : 'Membership'}</span>
                 </div>
               </div>
               
@@ -742,11 +743,11 @@ const Courses: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="text-lg font-semibold text-primary-600">
-                      {user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess) ? 'Full Access' : 'Membership Access'}
+                      {user && (secureStorage.isSubscriptionActive() || hasTrialAccess) ? 'Full Access' : 'Membership Access'}
                     </span>
                   </div>
                   <button onClick={() => handleEnroll(course.id)} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors duration-200 flex items-center space-x-2">
-                    {user && (localStorage.getItem('subscription_active') === 'true' || hasTrialAccess) ? (
+                    {user && (secureStorage.isSubscriptionActive() || hasTrialAccess) ? (
                       <>
                       <FaUnlock className="h-4 w-4" />
                         <span>Start Learning</span>
@@ -805,7 +806,7 @@ const Courses: React.FC = () => {
         )}
 
         {/* Membership CTA - Only show when subscription is not active and no trial access */}
-        {(!user || (localStorage.getItem('subscription_active') !== 'true' && !hasTrialAccess)) && (
+        {(!user || (!secureStorage.isSubscriptionActive() && !hasTrialAccess)) && (
         <div className="mt-12 bg-gradient-to-r from-primary-50 to-secondary-50 rounded-xl p-8 text-center">
           <div className="max-w-2xl mx-auto">
             <h3 className="text-2xl font-bold text-primary-900 mb-4">
@@ -822,7 +823,7 @@ const Courses: React.FC = () => {
         )}
 
         {/* Success Message for Active Subscribers */}
-        {user && localStorage.getItem('subscription_active') === 'true' && (
+        {user && secureStorage.isSubscriptionActive() && (
           <div className="mt-12 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-8 text-center border border-green-200">
             <div className="max-w-2xl mx-auto">
               <h3 className="text-2xl font-bold text-green-900 mb-4">

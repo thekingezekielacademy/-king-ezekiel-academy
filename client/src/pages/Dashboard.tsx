@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import secureStorage from '../utils/secureStorage';
 import TrialBanner from '../components/TrialBanner';
 import { TrialStatus } from '../utils/trialManager';
 import { 
@@ -84,7 +85,7 @@ const Dashboard: React.FC = () => {
   
   // Check subscription status
   const [subActive, setSubActive] = useState<boolean>(() => {
-    try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
+    try { return secureStorage.isSubscriptionActive(); } catch { return false; }
   });
 
   // Calculate level based on XP (every 1000 XP = 1 level)
@@ -111,15 +112,15 @@ const Dashboard: React.FC = () => {
         setSubActive(true);
         console.log('✅ Found active subscription in database');
       } else {
-        // Fallback to localStorage
-        const localSubActive = localStorage.getItem('subscription_active') === 'true';
-        setSubActive(localSubActive);
-        console.log('Using localStorage subscription status:', localSubActive);
+        // Fallback to secure storage
+        const secureSubActive = secureStorage.isSubscriptionActive();
+        setSubActive(secureSubActive);
+        console.log('Using secure storage subscription status:', secureSubActive);
       }
     } catch (error) {
-      console.log('Database not available, using localStorage fallback');
-      const localSubActive = localStorage.getItem('subscription_active') === 'true';
-      setSubActive(localSubActive);
+      console.log('Database not available, using secure storage fallback');
+      const secureSubActive = secureStorage.isSubscriptionActive();
+      setSubActive(secureSubActive);
     }
   }, [user?.id]);
 

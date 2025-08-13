@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import secureStorage from '../utils/secureStorage';
 import { FaEdit, FaEnvelope, FaUser, FaImage, FaKey, FaSave, FaTimes, FaCreditCard, FaHistory } from 'react-icons/fa';
 
 declare global {
@@ -29,29 +30,29 @@ const Profile: React.FC = () => {
   
   // Check subscription status from localStorage and update state
   const [subActive, setSubActive] = useState<boolean>(() => {
-    try { return localStorage.getItem('subscription_active') === 'true'; } catch { return false; }
+    try { return secureStorage.isSubscriptionActive(); } catch { return false; }
   });
 
-  // Update subActive when localStorage changes
+  // Update subActive when secure storage changes
   useEffect(() => {
-    const checkLocalStorage = () => {
+    const checkSecureStorage = () => {
       try {
-        const isActive = localStorage.getItem('subscription_active') === 'true';
-        console.log('🔄 localStorage check - subscription_active:', isActive);
+        const isActive = secureStorage.isSubscriptionActive();
+        console.log('🔄 Secure storage check - subscription_active:', isActive);
         setSubActive(isActive);
       } catch {
-        console.log('❌ Error reading localStorage');
+        console.log('❌ Error reading secure storage');
         setSubActive(false);
       }
     };
 
     // Check immediately
-    checkLocalStorage();
+    checkSecureStorage();
 
-    // Listen for storage changes
-    window.addEventListener('storage', checkLocalStorage);
+    // Set up interval to check for changes (since sessionStorage doesn't fire storage events)
+    const interval = setInterval(checkSecureStorage, 5000); // Check every 5 seconds
     
-    return () => window.removeEventListener('storage', checkLocalStorage);
+    return () => clearInterval(interval);
   }, []);
   // Removed unused state variables
 
@@ -103,28 +104,29 @@ const Profile: React.FC = () => {
           setSubActive(false); // Update subscription status
         }
       } catch (tableError) {
-        console.log('user_subscriptions table not available yet, using localStorage fallback');
-        // Check localStorage for fallback data
-        const localSubActive = localStorage.getItem('subscription_active') === 'true';
-        console.log('localStorage subscription status:', localSubActive);
+        console.log('user_subscriptions table not available yet, using secure storage fallback');
+        // Check secure storage for fallback data
+        const secureSubActive = secureStorage.isSubscriptionActive();
+        console.log('Secure storage subscription status:', secureSubActive);
         
-        if (localSubActive) {
+        if (secureSubActive) {
+          const subscriptionData = secureStorage.getSubscriptionData();
           const fallbackSubscription = {
             plan_name: 'Monthly Membership',
             status: 'active',
             amount: 250000,
             currency: 'NGN',
             start_date: new Date().toISOString(),
-            migration: 'localStorage fallback',
-            next_payment_date: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+            migration: 'secure storage fallback',
+            next_payment_date: subscriptionData.subscription_next_renewal || new Date().toISOString(),
           };
           setSubscription(fallbackSubscription);
           setSubActive(true); // Update subscription status
-          console.log('✅ Set subscription active from localStorage fallback');
+          console.log('✅ Set subscription active from secure storage fallback');
         } else {
           setSubscription(null);
           setSubActive(false); // Update subscription status
-          console.log('❌ No active subscription in localStorage');
+          console.log('❌ No active subscription in secure storage');
         }
       }
       
@@ -144,24 +146,25 @@ const Profile: React.FC = () => {
           setBillingHistory([]);
         }
       } catch (tableError) {
-        console.log('subscription_payments table not available yet, using localStorage fallback');
-        // Check localStorage for fallback data
-        const localSubActive = localStorage.getItem('subscription_active') === 'true';
-        console.log('localStorage billing fallback, subscription active:', localSubActive);
+        console.log('subscription_payments table not available yet, using secure storage fallback');
+        // Check secure storage for fallback data
+        const secureSubActive = secureStorage.isSubscriptionActive();
+        console.log('Secure storage billing fallback, subscription active:', secureSubActive);
         
-        if (localSubActive) {
+        if (secureSubActive) {
+          const subscriptionData = secureStorage.getSubscriptionData();
           const fallbackPayment = {
-            id: 'local-1',
+            id: 'secure-1',
             amount: 250000,
             currency: 'NGN',
             status: 'success',
-            created_at: localStorage.getItem('subscription_next_renewal') || new Date().toISOString(),
+            created_at: subscriptionData.subscription_next_renewal || new Date().toISOString(),
           };
           setBillingHistory([fallbackPayment]);
-          console.log('✅ Set billing history from localStorage fallback');
+          console.log('✅ Set billing history from secure storage fallback');
         } else {
           setBillingHistory([]);
-          console.log('❌ No billing history in localStorage');
+          console.log('❌ No billing history in secure storage');
         }
       }
       
@@ -304,15 +307,17 @@ const Profile: React.FC = () => {
                           next_payment_date: next.toISOString(),
                         });
                       
-                      if (subError) {
-                        console.error('Error saving subscription to database:', subError);
-                        // Only use localStorage if database save fails
-                        localStorage.setItem('subscription_active', 'true');
-                        localStorage.setItem('subscription_ref', response.reference || ref);
-                        localStorage.setItem('subscription_amount', '2500');
-                        localStorage.setItem('subscription_currency', 'NGN');
-                        localStorage.setItem('subscription_next_renewal', nextStr);
-                      } else {
+                                                                          if (subError) {
+                            console.error('Error saving subscription to database:', subError);
+                            // Only use secure storage if database save fails
+                            secureStorage.setSubscriptionData({
+                              subscription_active: 'true',
+                              subscription_ref: response.reference || ref,
+                              subscription_amount: '2500',
+                              subscription_currency: 'NGN',
+                              subscription_next_renewal: nextStr
+                            });
+                          } else {
                         console.log('✅ Subscription saved to database successfully');
                       }
                       
@@ -341,12 +346,14 @@ const Profile: React.FC = () => {
                       
                     } catch (error) {
                       console.error('Error saving to database:', error);
-                      // Fallback to localStorage only if database completely fails
-                      localStorage.setItem('subscription_active', 'true');
-                      localStorage.setItem('subscription_ref', response.reference || ref);
-                      localStorage.setItem('subscription_amount', '2500');
-                      localStorage.setItem('subscription_currency', 'NGN');
-                      localStorage.setItem('subscription_next_renewal', nextStr);
+                      // Fallback to secure storage only if database completely fails
+                      secureStorage.setSubscriptionData({
+                        subscription_active: 'true',
+                        subscription_ref: response.reference || ref,
+                        subscription_amount: '2500',
+                        subscription_currency: 'NGN',
+                        subscription_next_renewal: nextStr
+                      });
                     }
                   };
                   
