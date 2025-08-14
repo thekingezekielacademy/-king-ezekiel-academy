@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FaArrowLeft, FaSave, FaEye } from 'react-icons/fa';
@@ -56,14 +56,9 @@ const AddBlogPost: React.FC = () => {
     'Information Security'
   ];
 
-  // Fetch existing blog post data when editing
-  useEffect(() => {
-    if (isEditing && id) {
-      fetchExistingBlogPost();
-    }
-  }, [isEditing, id]);
-
-  const fetchExistingBlogPost = async () => {
+  const fetchExistingBlogPost = useCallback(async () => {
+    if (!id) return;
+    
     try {
       setLoading(true);
       
@@ -100,18 +95,25 @@ const AddBlogPost: React.FC = () => {
         conclusion: conclusion,
         image: post.featured_image_url || '',
         status: post.status || 'draft',
-        reading_time: 1, // Default for now
-        featured: false, // Default for now
+        reading_time: post.reading_time || 1,
+        featured: post.featured || false,
         selectedCategory: post.blog_post_categories?.[0]?.blog_categories?.name || '',
-        selectedTags: post.blog_post_tags?.map((t: any) => t.blog_tags.name) || []
+        selectedTags: post.blog_post_tags?.map(pt => pt.blog_tags.name) || []
       });
+      
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching blog post:', error);
-      alert('Failed to load blog post for editing');
-    } finally {
+      console.error('Error fetching existing blog post:', error);
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  // Fetch existing blog post data when editing
+  useEffect(() => {
+    if (isEditing && id) {
+      fetchExistingBlogPost();
+    }
+  }, [isEditing, id, fetchExistingBlogPost]);
 
   const handleInputChange = (field: keyof BlogPostData, value: string | string[] | number | boolean) => {
     setBlogData(prev => ({
@@ -246,79 +248,115 @@ const AddBlogPost: React.FC = () => {
     try {
       setSaving(true);
       
-      // Insert blog post into database using current schema
-      const { data: blogPost, error: blogError } = await supabase
-        .from('blog_posts')
-        .insert([{
-          title: blogData.title,
-          slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-          content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
-          excerpt: blogData.header,
-          featured_image_url: blogData.image || null,
-          status: 'draft',
-          published_at: null
-        }])
-        .select()
-        .single();
+      let blogPostId: string;
+      
+      if (isEditing && id) {
+        // Update existing blog post
+        const { data: blogPost, error: blogError } = await supabase
+          .from('blog_posts')
+          .update({
+            title: blogData.title,
+            slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
+            excerpt: blogData.header,
+            featured_image_url: blogData.image || null,
+            status: 'draft',
+            published_at: null
+          })
+          .eq('id', id)
+          .select()
+          .single();
 
-      if (blogError) {
-        throw blogError;
-      }
-
-      // Insert category relationship if selected
-      if (blogData.selectedCategory) {
-        const { error: categoryError } = await supabase
-          .from('blog_post_categories')
-          .insert([{
-            post_id: blogPost.id,
-            category_id: blogData.selectedCategory
-          }]);
-
-        if (categoryError) {
-          console.error('Error saving category:', categoryError);
+        if (blogError) {
+          throw blogError;
         }
+        
+        blogPostId = id;
+        console.log('Blog post updated successfully');
+      } else {
+        // Insert new blog post
+        const { data: blogPost, error: blogError } = await supabase
+          .from('blog_posts')
+          .insert([{
+            title: blogData.title,
+            slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
+            excerpt: blogData.header,
+            featured_image_url: blogData.image || null,
+            status: 'draft',
+            published_at: null
+          }])
+          .select()
+          .single();
+
+        if (blogError) {
+          throw blogError;
+        }
+        
+        blogPostId = blogPost.id;
+        console.log('Blog post created successfully');
       }
 
-      // Insert tags relationships
-      if (blogData.selectedTags.length > 0) {
-        for (const tagName of blogData.selectedTags) {
-          // First, ensure the tag exists
-          let { data: existingTag } = await supabase
-            .from('blog_tags')
-            .select('id')
-            .eq('name', tagName)
-            .single();
-
-          if (!existingTag) {
-            // Create new tag if it doesn't exist
-            const { data: newTag, error: tagError } = await supabase
-              .from('blog_tags')
-              .insert([{ name: tagName }])
-              .select()
-              .single();
-
-            if (tagError) {
-              console.error('Error creating tag:', tagError);
-              continue;
-            }
-            existingTag = newTag;
-          }
-
-          // Create post-tag relationship
-          const { error: postTagError } = await supabase
-            .from('blog_post_tags')
+      // Handle category and tags
+      if (isEditing && id) {
+        // Update existing relationships
+        await updateCategoryAndTags();
+      } else {
+        // Insert new relationships
+        if (blogData.selectedCategory) {
+          const { error: categoryError } = await supabase
+            .from('blog_post_categories')
             .insert([{
-              post_id: blogPost.id,
-              tag_id: existingTag.id
+              post_id: blogPostId,
+              category_id: blogData.selectedCategory
             }]);
 
-          if (postTagError) {
-            console.error('Error saving tag relationship:', postTagError);
+          if (categoryError) {
+            console.error('Error saving category:', categoryError);
+          }
+        }
+
+        // Insert tags relationships
+        if (blogData.selectedTags.length > 0) {
+          for (const tagName of blogData.selectedTags) {
+            // First, ensure the tag exists
+            let { data: existingTag } = await supabase
+              .from('blog_tags')
+              .select('id')
+              .eq('name', tagName)
+              .single();
+
+            if (!existingTag) {
+              // Create new tag if it doesn't exist
+              const { data: newTag, error: tagError } = await supabase
+                .from('blog_tags')
+                .insert([{ name: tagName }])
+                .select()
+                .single();
+
+              if (tagError) {
+                console.error('Error creating tag:', tagError);
+                continue;
+              }
+              existingTag = newTag;
+            }
+
+            // Create post-tag relationship
+            const { error: postTagError } = await supabase
+              .from('blog_post_tags')
+              .insert([{
+                post_id: blogPostId,
+                tag_id: existingTag.id
+              }]);
+
+            if (postTagError) {
+              console.error('Error saving tag relationship:', postTagError);
+            }
           }
         }
       }
       
-      alert('Blog post saved successfully!');
+      alert(isEditing ? 'Blog post updated successfully!' : 'Blog post saved successfully!');
       navigate('/admin/blog');
     } catch (error) {
       console.error('Error saving blog post:', error);
@@ -337,29 +375,65 @@ const AddBlogPost: React.FC = () => {
     try {
       setSaving(true);
       
-      // Insert blog post into database with published status using current schema
-      const { data: blogPost, error: blogError } = await supabase
-        .from('blog_posts')
-        .insert([{
-          title: blogData.title,
-          slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-          content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
-          excerpt: blogData.header,
-          featured_image_url: blogData.image || null,
-          status: 'published',
-          published_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
+      let blogPostId: string;
+      
+      if (isEditing && id) {
+        // Update existing blog post
+        const { data: blogPost, error: blogError } = await supabase
+          .from('blog_posts')
+          .update({
+            title: blogData.title,
+            slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
+            excerpt: blogData.header,
+            featured_image_url: blogData.image || null,
+            status: 'published',
+            published_at: new Date().toISOString()
+          })
+          .eq('id', id)
+          .select()
+          .single();
 
-      if (blogError) {
-        throw blogError;
+        if (blogError) {
+          throw blogError;
+        }
+        
+        blogPostId = id;
+        console.log('Blog post updated and published successfully');
+      } else {
+        // Insert new blog post
+        const { data: blogPost, error: blogError } = await supabase
+          .from('blog_posts')
+          .insert([{
+            title: blogData.title,
+            slug: blogData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            content: blogData.body + (blogData.conclusion ? '\n\n## Conclusion\n\n' + blogData.conclusion : ''),
+            excerpt: blogData.header,
+            featured_image_url: blogData.image || null,
+            status: 'published',
+            published_at: new Date().toISOString()
+          }])
+          .select()
+          .single();
+
+        if (blogError) {
+          throw blogError;
+        }
+        
+        blogPostId = blogPost.id;
+        console.log('Blog post created and published successfully');
       }
 
       // Handle category and tags
-      await handleCategoryAndTags(blogPost.id);
+      if (isEditing && id) {
+        // Update existing relationships
+        await updateCategoryAndTags();
+      } else {
+        // Insert new relationships
+        await handleCategoryAndTags(blogPostId);
+      }
       
-      alert('Blog post published successfully!');
+      alert(isEditing ? 'Blog post updated and published successfully!' : 'Blog post published successfully!');
       navigate('/admin/blog');
     } catch (error) {
       console.error('Error publishing blog post:', error);

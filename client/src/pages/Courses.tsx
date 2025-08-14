@@ -603,8 +603,8 @@ const Courses: React.FC = () => {
         <div className="text-center mb-6 sm:mb-8">
           <div className="flex items-center justify-center gap-2 sm:gap-4 mb-3 sm:mb-4">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 leading-tight">
-              Explore Our Courses
-            </h1>
+            Explore Our Courses
+          </h1>
             {user && (
               <button
                 onClick={() => {
@@ -929,8 +929,8 @@ const Courses: React.FC = () => {
                   </div>
                   <div className="flex items-center space-x-1">
                     <FaUser className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden sm:inline">{course.instructor}</span>
-                    <span className="sm:hidden">Admin</span>
+                                    <span className="hidden sm:inline">{course.instructor}</span>
+                <span className="sm:hidden">King Ezekiel Academy</span>
                   </div>
                 </div>
                 

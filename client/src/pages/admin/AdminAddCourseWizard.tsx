@@ -311,7 +311,7 @@ const AdminAddCourseWizard: React.FC = () => {
              <option value="expert">Lv 4 – Expert</option>
              <option value="mastery">Lv 5 – Mastery</option>
            </select>
-        </div>
+                  </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import { FaSearch, FaClock, FaUser, FaTags, FaFolder, FaArrowRight } from 'react-icons/fa';
-import { createClient } from '@supabase/supabase-js';
-
-// Create an anonymous client for public blog access
-const supabase = createClient(
-  'https://evqerkqiquwxqlizdqmg.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cWVya3FpcXV3eHFsaXpkcW1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ2NzE0NTUsImV4cCI6MjA3MDI0NzQ1NX0.0hoqOOvJzRFX6zskur2HixoIW2XfAP0fMBwTMGcd7kw',
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false
-    }
-  }
-);
 
 interface BlogPost {
   id: string;

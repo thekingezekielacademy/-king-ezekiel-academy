@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import NetworkStatus from './components/NetworkStatus';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Home from './pages/Home';
@@ -36,6 +37,7 @@ function App() {
       <Router basename={process.env.PUBLIC_URL}>
         <div className="App">
           <Navbar />
+          <NetworkStatus />
           <main>
             <Routes>
               <Route path="/" element={<Home />} />

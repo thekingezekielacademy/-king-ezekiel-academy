@@ -8,23 +8,23 @@ const HeroSection: React.FC = () => {
     <section className="relative bg-gradient-to-br from-white via-primary-50 to-secondary-50 text-primary-900 overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-primary-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
-        <div className="absolute top-40 right-10 w-72 h-72 bg-secondary-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
-        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-accent-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
+        <div className="absolute top-10 sm:top-20 left-5 sm:left-10 w-48 h-48 sm:w-72 sm:h-72 bg-primary-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
+        <div className="absolute top-20 sm:top-40 right-5 sm:right-10 w-48 h-48 sm:w-72 sm:h-72 bg-secondary-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
+        <div className="absolute -bottom-4 sm:-bottom-8 left-10 sm:left-20 w-48 h-48 sm:w-72 sm:h-72 bg-accent-100 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse-slow"></div>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 lg:py-24 xl:py-32">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
           {/* Content */}
-          <div className="text-center lg:text-left">
+          <div className="text-center lg:text-left order-1 lg:order-1">
             <div className="inline-flex items-center px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium mb-6">
               <FaRocket className="mr-2 h-4 w-4" />
               Transform Your Career Today
             </div>
             
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight mb-8">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-tight mb-6 sm:mb-8">
               Master Digital Skills
-              <br />
+              <br className="hidden sm:block" />
               <span className="bg-gradient-to-r from-primary-600 to-primary-900 bg-clip-text text-transparent">
                 Transform Your Future
               </span>
@@ -36,101 +36,101 @@ const HeroSection: React.FC = () => {
             </p>
             
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-6 justify-center lg:justify-start mb-12">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center lg:justify-start mb-8 sm:mb-12">
               <Link
                 to="/courses"
-                className="group inline-flex items-center justify-center px-8 py-4 bg-primary-900 text-white font-semibold rounded-xl shadow-soft hover:shadow-glow transition-all duration-300 transform hover:scale-105"
+                className="group inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-primary-900 text-white font-semibold rounded-xl shadow-soft hover:shadow-glow transition-all duration-300 transform hover:scale-105 text-base sm:text-lg"
               >
                 <span className="mr-2">Start Learning Now</span>
-                <FaArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform duration-200" />
+                <FaArrowRight className="h-4 w-4 sm:h-5 sm:w-5 group-hover:translate-x-1 transition-transform duration-200" />
               </Link>
-              <button onClick={() => setShowVideo(true)} className="group inline-flex items-center justify-center px-8 py-4 border-2 border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 hover:border-primary-300 transition-all duration-300 transform hover:scale-105">
-                <FaPlay className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform duration-200" />
+              <button onClick={() => setShowVideo(true)} className="group inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 border-2 border-primary-200 text-primary-700 font-semibold rounded-xl hover:bg-primary-50 hover:border-primary-300 transition-all duration-300 transform hover:scale-105 text-base sm:text-lg">
+                <FaPlay className="mr-2 h-4 w-4 sm:h-5 sm:w-5 group-hover:scale-110 transition-transform duration-200" />
                 Watch Our Story
               </button>
             </div>
 
             {/* Trust Indicators */}
-            <div className="flex items-center justify-center lg:justify-start space-x-6 mb-8">
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start space-y-2 sm:space-y-0 sm:space-x-6 mb-6 sm:mb-8">
               <div className="flex items-center space-x-2">
-                <FaShieldAlt className="h-5 w-5 text-primary-600" />
-                <span className="text-sm text-primary-600 font-medium">Trusted by 10,000+ students</span>
+                <FaShieldAlt className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                <span className="text-xs sm:text-sm text-primary-600 font-medium">Trusted by 10,000+ students</span>
               </div>
               <div className="flex items-center space-x-2">
-                <FaClock className="h-5 w-5 text-primary-600" />
-                <span className="text-sm text-primary-600 font-medium">24/7 Access</span>
+                <FaClock className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                <span className="text-xs sm:text-sm text-primary-600 font-medium">24/7 Access</span>
               </div>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8">
               <div className="text-center group">
-                <div className="flex items-center justify-center mb-3">
-                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
-                    <FaUsers className="h-6 w-6 text-primary-600" />
+                <div className="flex items-center justify-center mb-2 sm:mb-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
+                    <FaUsers className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-primary-900">10,000+</div>
-                <div className="text-sm text-primary-800 font-medium">Students Taught</div>
+                <div className="text-lg sm:text-2xl font-bold text-primary-900">10,000+</div>
+                <div className="text-xs sm:text-sm text-primary-800 font-medium">Students Taught</div>
               </div>
               <div className="text-center group">
-                <div className="flex items-center justify-center mb-3">
-                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
-                    <FaGraduationCap className="h-6 w-6 text-primary-600" />
+                <div className="flex items-center justify-center mb-2 sm:mb-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
+                    <FaGraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-primary-900">25+</div>
-                <div className="text-sm text-primary-800 font-medium">Courses Available</div>
+                <div className="text-lg sm:text-2xl font-bold text-primary-900">25+</div>
+                <div className="text-xs sm:text-sm text-primary-800 font-medium">Courses Available</div>
               </div>
               <div className="text-center group">
-                <div className="flex items-center justify-center mb-3">
-                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
-                    <FaStar className="h-6 w-6 text-primary-600" />
+                <div className="flex items-center justify-center mb-2 sm:mb-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
+                    <FaStar className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-primary-900">4.9/5</div>
-                <div className="text-sm text-primary-800 font-medium">Student Rating</div>
+                <div className="text-lg sm:text-2xl font-bold text-primary-900">4.9/5</div>
+                <div className="text-xs sm:text-sm text-primary-800 font-medium">Student Rating</div>
               </div>
               <div className="text-center group">
-                <div className="flex items-center justify-center mb-3">
-                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
-                    <FaGraduationCap className="h-6 w-6 text-primary-600" />
+                <div className="flex items-center justify-center mb-2 sm:mb-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary-100 rounded-xl flex items-center justify-center group-hover:bg-primary-200 transition-colors duration-200">
+                    <FaGraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-primary-900">₦2,500</div>
-                <div className="text-sm text-primary-800 font-medium">Per Month</div>
+                <div className="text-lg sm:text-2xl font-bold text-primary-900">₦2,500</div>
+                <div className="text-xs sm:text-sm text-primary-800 font-medium">Per Month</div>
               </div>
             </div>
           </div>
 
           {/* Hero Image/Illustration */}
-          <div className="relative">
+          <div className="relative order-2 lg:order-2">
             <div className="relative z-10">
-              <div className="bg-white rounded-3xl p-8 shadow-soft border border-primary-100">
-                <div className="text-center">
-                  <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-6 animate-float">
-                    <FaGraduationCap className="h-12 w-12 text-primary-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-4 text-primary-900">Digital Skills Learning</h3>
-                  <p className="text-primary-800 mb-8 leading-relaxed font-medium">
-                    Master the most in-demand digital skills with our comprehensive, industry-aligned courses
-                  </p>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-3 p-3 bg-primary-50 rounded-lg">
-                      <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
-                      <span className="text-sm text-primary-900 font-semibold">Web Development</span>
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-soft border border-primary-100">
+                                  <div className="text-center">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6 animate-float">
+                      <FaGraduationCap className="h-10 w-10 sm:h-12 sm:w-12 text-primary-600" />
                     </div>
-                    <div className="flex items-center space-x-3 p-3 bg-primary-50 rounded-lg">
+                    <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-primary-900">Digital Skills Learning</h3>
+                    <p className="text-primary-800 mb-6 sm:mb-8 leading-relaxed font-medium text-sm sm:text-base">
+                      Master the most in-demand digital skills with our comprehensive, industry-aligned courses
+                    </p>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-primary-50 rounded-lg">
                       <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
-                      <span className="text-sm text-primary-900 font-semibold">Digital Marketing</span>
+                      <span className="text-xs sm:text-sm text-primary-900 font-semibold">Web Development</span>
                     </div>
-                    <div className="flex items-center space-x-3 p-3 bg-primary-50 rounded-lg">
+                    <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-primary-50 rounded-lg">
                       <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
-                      <span className="text-sm text-primary-900 font-semibold">UI/UX Design</span>
+                      <span className="text-xs sm:text-sm text-primary-900 font-semibold">Digital Marketing</span>
                     </div>
-                    <div className="flex items-center space-x-3 p-3 bg-primary-50 rounded-lg">
+                    <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-primary-50 rounded-lg">
                       <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
-                      <span className="text-sm text-primary-900 font-semibold">Data Analytics</span>
+                      <span className="text-xs sm:text-sm text-primary-900 font-semibold">UI/UX Design</span>
+                    </div>
+                    <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-primary-50 rounded-lg">
+                      <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
+                      <span className="text-xs sm:text-sm text-primary-900 font-semibold">Data Analytics</span>
                     </div>
                   </div>
                 </div>
@@ -138,9 +138,9 @@ const HeroSection: React.FC = () => {
             </div>
             
             {/* Floating Elements */}
-            <div className="absolute -top-4 -right-4 w-20 h-20 bg-primary-200 rounded-full opacity-60 animate-float"></div>
-            <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-secondary-200 rounded-full opacity-60 animate-float" style={{animationDelay: '2s'}}></div>
-            <div className="absolute top-1/2 -right-8 w-12 h-12 bg-accent-200 rounded-full opacity-60 animate-float" style={{animationDelay: '4s'}}></div>
+            <div className="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 w-16 h-16 sm:w-20 sm:h-20 bg-primary-200 rounded-full opacity-60 animate-float"></div>
+            <div className="absolute -bottom-2 -left-2 sm:-bottom-4 sm:-left-4 w-12 h-12 sm:w-16 sm:h-16 bg-secondary-200 rounded-full opacity-60 animate-float" style={{animationDelay: '2s'}}></div>
+            <div className="absolute top-1/2 -right-4 sm:-right-8 w-8 h-8 sm:w-12 sm:h-12 bg-accent-200 rounded-full opacity-60 animate-float" style={{animationDelay: '4s'}}></div>
           </div>
         </div>
       </div>

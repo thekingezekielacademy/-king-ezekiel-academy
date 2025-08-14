@@ -30,19 +30,35 @@ const AdminBlog: React.FC = () => {
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const POSTS_PER_PAGE = 10;
 
   useEffect(() => {
     if (user?.role === 'admin') {
-      fetchBlogPosts();
+      fetchBlogPosts(0, false);
     }
   }, [user]);
 
-  const fetchBlogPosts = async () => {
+  const loadMorePosts = async () => {
+    const nextPage = currentPage + 1;
+    setCurrentPage(nextPage);
+    await fetchBlogPosts(nextPage, true);
+  };
+
+  const fetchBlogPosts = async (page: number = 0, append: boolean = false) => {
     try {
-      setLoading(true);
+      if (page === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       setError('');
       
-      // Fetch blog posts with categories and tags
+      console.log(`🔍 Fetching blog posts page ${page}...`);
+      
+      // Fetch blog posts with categories and tags, using pagination
       const { data: posts, error: postsError } = await supabase
         .from('blog_posts')
         .select(`
@@ -56,7 +72,8 @@ const AdminBlog: React.FC = () => {
             blog_tags(id, name, slug)
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(page * POSTS_PER_PAGE, (page * POSTS_PER_PAGE) + POSTS_PER_PAGE - 1);
 
       if (postsError) {
         console.error('Supabase error:', postsError);
@@ -67,6 +84,8 @@ const AdminBlog: React.FC = () => {
         }
         return;
       }
+
+      console.log(`📊 Supabase response for page ${page}:`, { data: posts, error: postsError });
 
       // Transform the data to match our interface
       const transformedPosts: BlogPost[] = (posts || []).map(post => ({
@@ -83,24 +102,56 @@ const AdminBlog: React.FC = () => {
         })) || []
       }));
       
-      console.log('Transformed posts:', transformedPosts);
-      setBlogPosts(transformedPosts);
+      console.log(`✅ Blog posts data received for page ${page}:`, transformedPosts);
+      console.log(`🔍 Sample blog post data:`, transformedPosts[0]);
+      console.log(`🔄 Transformed blog posts for page ${page}:`, transformedPosts);
+      
+      if (append) {
+        setBlogPosts(prev => [...prev, ...transformedPosts]);
+      } else {
+        setBlogPosts(transformedPosts);
+      }
+      
+      // Check if there are more posts
+      const hasMore = posts && posts.length === POSTS_PER_PAGE;
+      setHasMorePosts(hasMore);
+      console.log(`📊 Has more blog posts:`, hasMore);
+      
     } catch (err) {
       setError('Failed to fetch blog posts');
       console.error('Error fetching blog posts:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   const handleDeletePost = async (postId: string) => {
     if (window.confirm('Are you sure you want to delete this blog post?')) {
       try {
-        // For now, just remove from local state - replace with actual Supabase delete
+        // First delete related records (foreign key constraints)
+        await supabase.from('blog_post_tags').delete().eq('post_id', postId);
+        await supabase.from('blog_post_categories').delete().eq('post_id', postId);
+        
+        // Then delete the blog post
+        const { error: deleteError } = await supabase
+          .from('blog_posts')
+          .delete()
+          .eq('id', postId);
+
+        if (deleteError) {
+          throw deleteError;
+        }
+
+        // Remove from local state after successful deletion
         setBlogPosts(prev => prev.filter(post => post.id !== postId));
+        
+        // Show success message
+        alert('Blog post deleted successfully!');
       } catch (err) {
         setError('Failed to delete blog post');
         console.error('Error deleting blog post:', err);
+        alert('Failed to delete blog post. Please try again.');
       }
     }
   };
@@ -169,7 +220,7 @@ const AdminBlog: React.FC = () => {
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
             <p className="text-red-700 font-medium">{error}</p>
             <button
-              onClick={fetchBlogPosts}
+              onClick={() => fetchBlogPosts(0, false)}
               className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
               Try Again
@@ -193,7 +244,18 @@ const AdminBlog: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <>
+            {/* Post Count Display */}
+            <div className="mb-6 text-center">
+              <p className="text-gray-600">
+                Showing <span className="font-semibold text-gray-900">{blogPosts.length}</span> blog posts
+                {hasMorePosts && (
+                  <span className="text-gray-500"> • More available</span>
+                )}
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {blogPosts.map((post) => (
               <div key={post.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
                 <div className="relative">
@@ -263,6 +325,30 @@ const AdminBlog: React.FC = () => {
               </div>
             ))}
           </div>
+          
+          {/* Load More Button */}
+          {hasMorePosts && (
+            <div className="mt-8 text-center">
+              <button
+                onClick={loadMorePosts}
+                disabled={loadingMore}
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <FaPlus className="w-5 h-5 mr-2" />
+                    Load More Posts
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

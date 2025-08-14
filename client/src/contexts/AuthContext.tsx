@@ -53,6 +53,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [onSignOut, setOnSignOut] = useState<(() => void) | null>(null);
   const fetchProfileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
+  const hasInitializedRef = useRef(false);
 
   // Debounced fetchProfile to prevent multiple rapid calls
   const fetchProfile = useCallback(async (userId?: string) => {
@@ -62,6 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     isFetchingRef.current = true;
+    setLoading(true);
     
     try {
       console.log('fetchProfile called');
@@ -102,6 +104,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Error fetching profile:', error);
         console.error('Error details:', { code: error.code, message: error.message, details: error.details });
+        
+        // Handle JWT expired error
+        if (error.code === 'PGRST303' || error.message?.includes('JWT expired')) {
+          console.log('JWT expired, attempting to refresh session...');
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError) {
+              console.error('Failed to refresh session:', refreshError);
+              // If refresh fails, sign out the user
+              await supabase.auth.signOut();
+              setUser(null);
+              setIsAdmin(false);
+              setLoading(false);
+              return;
+            }
+            if (refreshData.session) {
+              console.log('Session refreshed successfully, retrying profile fetch...');
+              // Retry the profile fetch with the new session
+              setTimeout(() => {
+                if (isFetchingRef.current) {
+                  isFetchingRef.current = false;
+                }
+                debouncedFetchProfile(userId);
+              }, 1000);
+              return;
+            }
+          } catch (refreshError) {
+            console.error('Error during session refresh:', refreshError);
+            // If refresh fails, sign out the user
+            await supabase.auth.signOut();
+            setUser(null);
+            setIsAdmin(false);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Handle network connectivity issues
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
+          console.log('Network connectivity issue detected, will retry in 5 seconds...');
+          setTimeout(() => {
+            if (isFetchingRef.current) {
+              isFetchingRef.current = false;
+            }
+            debouncedFetchProfile(userId);
+          }, 5000);
+          return;
+        }
+        
         // Don't clear the user state on database errors
         // Just log the error and keep the existing user data if available
         if (error.code === 'PGRST116') {
@@ -127,11 +178,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       
       setLoading(false);
+      setAuthLoading(false);
     } catch (error) {
       console.error('Error fetching profile:', error);
       console.error('Full error object:', error);
       // Don't clear user state on errors, just set loading to false
       setLoading(false);
+      setAuthLoading(false);
     } finally {
       isFetchingRef.current = false;
     }
@@ -153,15 +206,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [fetchProfile]);
 
   useEffect(() => {
-    // Initial session check
+    // Initial session check - only run once
     const checkSession = async () => {
+      if (hasInitializedRef.current) {
+        console.log('Already initialized, skipping initial session check');
+        return;
+      }
+      
+      hasInitializedRef.current = true;
+      
       try {
         const { data: { session } } = await supabase.auth.getSession();
         console.log('Initial session check:', session?.user?.id);
         
-        if (session?.user) {
+        if (session?.user && !user) {
           console.log('Initial session found, fetching profile...');
+          
+          // Check if session is about to expire (within 5 minutes)
+          const expiresAt = session.expires_at;
+          const now = Math.floor(Date.now() / 1000);
+          const timeUntilExpiry = expiresAt - now;
+          
+          if (timeUntilExpiry < 300) { // 5 minutes = 300 seconds
+            console.log('Session expiring soon, refreshing...');
+            try {
+              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+              if (refreshError) {
+                console.error('Failed to refresh session:', refreshError);
+              } else if (refreshData.session) {
+                console.log('Session refreshed proactively');
+              }
+            } catch (refreshError) {
+              console.error('Error during proactive session refresh:', refreshError);
+            }
+          }
+          
           debouncedFetchProfile(session.user.id);
+        } else if (session?.user && user) {
+          console.log('Initial session found, but user data already exists, skipping profile fetch');
+          setLoading(false);
+          setAuthLoading(false);
         } else {
           console.log('No initial session found');
           setLoading(false);
@@ -181,10 +265,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       async (event, session) => {
         console.log('Auth state change:', event, session?.user?.id);
         
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          if (session?.user) {
-            console.log('Session user found, fetching profile...');
+        if (event === 'SIGNED_IN') {
+          if (session?.user && !isFetchingRef.current && !user) {
+            console.log('User signed in, fetching profile...');
             debouncedFetchProfile(session.user.id);
+          }
+        } else if (event === 'TOKEN_REFRESHED') {
+          // Only fetch profile on token refresh if we don't have user data yet
+          if (session?.user && !isFetchingRef.current && !user) {
+            console.log('Token refreshed, fetching profile...');
+            debouncedFetchProfile(session.user.id);
+          } else {
+            console.log('Token refreshed, but user data already exists, skipping profile fetch');
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('User signed out, clearing state');
@@ -192,6 +284,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setIsAdmin(false);
           setLoading(false);
           setAuthLoading(false);
+          isFetchingRef.current = false;
+          hasInitializedRef.current = false;
           
           // Call the onSignOut callback if it exists
           if (onSignOut) {
@@ -207,7 +301,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearTimeout(fetchProfileTimeoutRef.current);
       }
     };
-  }, [onSignOut, debouncedFetchProfile]);
+  }, [onSignOut, debouncedFetchProfile, user]);
 
   const signUp = async (email: string, password: string, name: string) => {
     const { data, error } = await supabase.auth.signUp({

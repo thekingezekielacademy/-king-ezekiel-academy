@@ -268,20 +268,20 @@ const Profile: React.FC = () => {
         ref,
         amount: 250000, // Amount in kobo (₦2,500 = 250,000 kobo)
         currency: 'NGN',
-                callback: function(response: any) {
+        callback: function(response: any) {
           console.log('Paystack payment successful:', response);
           
           // Verify the payment was successful
           if (response.status === 'success') {
-            try {
+          try {
               // Calculate next renewal date
-              const next = new Date();
-              next.setMonth(next.getMonth() + 1);
-              const nextStr = next.toISOString().slice(0,10);
+            const next = new Date();
+            next.setMonth(next.getMonth() + 1);
+            const nextStr = next.toISOString().slice(0,10);
               
               // Update UI state immediately
-              setSubActive(true);
-              setShowManageSubscription(false);
+          setSubActive(true);
+          setShowManageSubscription(false);
               
               setMessage(`Subscription started successfully! Reference: ${response.reference || ref}`);
               
@@ -651,13 +651,13 @@ const Profile: React.FC = () => {
               console.log('🔍 Profile render - subscription:', subscription, 'subActive:', subActive);
               return (subscription || subActive);
             })() ? (
-              <div className="space-y-2 text-sm text-gray-700">
-                <div className="flex items-center justify-between">
-                  <span>Plan</span>
+            <div className="space-y-2 text-sm text-gray-700">
+              <div className="flex items-center justify-between">
+                <span>Plan</span>
                   <span className="font-medium text-primary-700">{subscription?.plan_name || 'Monthly Membership'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Status</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Status</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -680,17 +680,17 @@ const Profile: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span>Plan</span>
                   <span className="font-medium text-gray-500">No Active Plan</span>
-                </div>
-                <div className="flex items-center justify-between">
+              </div>
+              <div className="flex items-center justify-between">
                   <span>Status</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">Inactive</span>
-                </div>
+              </div>
                 <div className="flex items-center justify-between">
                   <span>Renews</span>
                   <span>—</span>
                 </div>
-              </div>
-            )}
+                </div>
+              )}
             <button onClick={() => setShowManageSubscription(true)} className={`mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
               (subscription || subActive)
                 ? 'border rounded-lg hover:bg-gray-50' 
@@ -719,7 +719,7 @@ const Profile: React.FC = () => {
                 <span className="ml-2 text-gray-600">Loading billing history...</span>
               </div>
             ) : billingHistory.length > 0 ? (
-              <div className="space-y-3 text-sm">
+            <div className="space-y-3 text-sm">
                 {billingHistory.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="text-gray-700">
@@ -736,9 +736,9 @@ const Profile: React.FC = () => {
                     }`}>
                       {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                     </div>
-                  </div>
-                ))}
-              </div>
+                </div>
+              ))}
+            </div>
             ) : (
               <div className="text-center py-8">
                 <FaHistory className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -864,9 +864,9 @@ const Profile: React.FC = () => {
                     <p className="mt-1 text-xs">Please contact support or check your configuration.</p>
                   </div>
                 ) : (
-                  <button
-                    onClick={startSubscription}
-                    disabled={!paystackReady || subActive}
+                <button
+                  onClick={startSubscription}
+                  disabled={!paystackReady || subActive}
                     className={`px-4 py-2 rounded-lg ${
                       paystackReady && !subActive 
                         ? 'bg-primary-600 text-white hover:bg-primary-700' 
@@ -877,7 +877,7 @@ const Profile: React.FC = () => {
                       ? (subActive ? 'Update subscription' : 'Subscribe Now') 
                       : 'Loading payment...'
                     }
-                  </button>
+                </button>
                 )}
                 <button
                   disabled={!subActive}

@@ -13,5 +13,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storageKey: 'supabase-auth',
     autoRefreshToken: true,
     detectSessionInUrl: true
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'king-ezekiel-academy'
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 })
