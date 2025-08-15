@@ -3,5 +3,10 @@
   "name": "king-ezekiel-academy",
   "buildCommand": "cp -r client/public client/src && cd client && npm run build",
   "outputDirectory": "client/build",
-  "installCommand": "npm install && cd client && npm install"
+  "installCommand": "npm install && cd client && npm install",
+  "build": {
+    "env": {
+      "VERCEL_BUILD_TIMESTAMP": "2025-08-15T14:00:00Z"
+    }
+  }
 }
