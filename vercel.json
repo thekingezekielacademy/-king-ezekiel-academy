@@ -4,6 +4,12 @@
   "buildCommand": "chmod +x vercel-build.sh && ./vercel-build.sh",
   "outputDirectory": "client/build",
   "installCommand": "npm install && cd client && npm install",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "build": {
     "env": {
       "VERCEL_BUILD_TIMESTAMP": "2025-01-15-$(date +%s)"
