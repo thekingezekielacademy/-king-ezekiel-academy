@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "king-ezekiel-academy",
+  "name": "thekingezekielacademy",
   "buildCommand": "chmod +x vercel-build.sh && ./vercel-build.sh",
   "outputDirectory": "client/build",
   "installCommand": "npm install && cd client && npm install",
